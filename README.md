@@ -5,9 +5,9 @@ This repository is a collection of several one source file minigames.
 ## Contents
 
 + Console Apps
-  + [24 Point Solver](./24point.md)
+  + [24 Point Solver](./24point/24point.md)
 + Win32 Apps
-  + [Game of Life](./gameoflife.md)
+  + [Game of Life](./GameofLife/GameofLife.md)
 
 ## License
 

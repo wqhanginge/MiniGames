@@ -41,10 +41,6 @@ using tstringstream = std::stringstream;
 #define GLM_DEFMAPH     100
 #define GLM_DEFRATIO    0.25
 
-#define GLFT_BITMAP     0
-#define GLFT_COORD      1
-#define GLFT_RECT       2
-
 #define GLWC_CLSNAME    "GAMEOFLIFE"
 #define GLWC_EXDATASIZE sizeof(LONG_PTR)
 #define GLWC_EXDATAOFF  0
@@ -90,19 +86,25 @@ using tstringstream = std::stringstream;
 #define GLW_DEFCOLUBEG  RGB(0, 0, 255)
 #define GLW_DEFCOLTBG   RGB(0, 255, 255)
 
+#define GLFT_BITMAP     0
+#define GLFT_COORD      1
+#define GLFT_RECT       2
+
 #define __TOSTR(n)      #n
 #define TOSTR(n)        __TOSTR(n)
-#define GLCMD_HELP      "\
-CmdLine Syntax:\n\
-   <exe> -r WIDTH HEIGHT RATIO [PIXELW]\n\
-   <exe> -f FILENAME\n\
-   <exe> -h\n\
+#define GLSTR_FTDESC    "\
 File Format:\n\
    BITMAP\t{" TOSTR(GLFT_BITMAP) " WIDTH HEIGHT PIXELW  0 0 1 0 ... 1 0 1}\n\
    COORD\t{" TOSTR(GLFT_COORD) " WIDTH HEIGHT PIXELW  x y x y x y ...}\n\
    RECT\t{" TOSTR(GLFT_RECT) " WIDTH HEIGHT PIXELW  left top right bottom ...}\
 "
-#define GLW_HELP        "\
+#define GLSTR_CMDHELP   "\
+CmdLine Syntax:\n\
+   <exe> -r WIDTH HEIGHT RATIO [PIXELW]\n\
+   <exe> -h\n\
+   <exe> FILENAME\
+"
+#define GLSTR_WNDHELP   "\
  ESC\tclose \n\
  w\tzoom in \n\
  s\tzoom out \n\
@@ -516,8 +518,9 @@ LRESULT onGLHelp(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     HDC hdc = GetDC(hwnd);
     RECT uprect = {};
     pgl->state ^= GLRT_SF_HELP;
-    DrawText(hdc, TEXT(GLW_HELP), -1, &uprect, DT_CALCRECT | DT_EXPANDTABS);
+    DrawText(hdc, TEXT(GLSTR_WNDHELP), -1, &uprect, DT_CALCRECT | DT_EXPANDTABS);
     InvalidateRect(hwnd, &uprect, FALSE);
+    ReleaseDC(hwnd, hdc);
     return 0;
 }
 
@@ -705,9 +708,9 @@ LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         RECT trect = {};
         SetBkColor(hdcbuffer, GLW_DEFCOLTBG);
         SetDCBrushColor(hdcbuffer, GLW_DEFCOLTBG);
-        DrawText(hdcbuffer, TEXT(GLW_HELP), -1, &trect, DT_CALCRECT | DT_EXPANDTABS);
+        DrawText(hdcbuffer, TEXT(GLSTR_WNDHELP), -1, &trect, DT_CALCRECT | DT_EXPANDTABS);
         FillRect(hdcbuffer, &trect, hbr);
-        DrawText(hdcbuffer, TEXT(GLW_HELP), -1, &trect, DT_EXPANDTABS);
+        DrawText(hdcbuffer, TEXT(GLSTR_WNDHELP), -1, &trect, DT_EXPANDTABS);
     }
 
     BitBlt(
@@ -807,7 +810,7 @@ int runGame(GameOfLifeInfo* pgl, HINSTANCE hInstance, int nCmdShow) {
 int fromFile(const tstring& fname, HINSTANCE hInstance, int nCmdShow) {
     std::ifstream file(fname);
     if (!file.is_open()) return RETVAL_ERRFOPEN;
-    
+
     //header part: FT W H PW
     int ret = RETVAL_BADFTYPE;
     int ftype, w, h, pw;
@@ -817,8 +820,8 @@ int fromFile(const tstring& fname, HINSTANCE hInstance, int nCmdShow) {
     pw = min(max(pw, GLW_MINPIXW), GLW_MAXPIXW);
 
     switch (ftype) {
-    case GLFT_BITMAP:{  //0 1 1 0 1 ...
-        bool* map = new bool[w * h]{};
+    case GLFT_BITMAP: { //0 1 1 0 1 ...
+        bool* map = new bool[w * h] {};
         for (int i = 0; i < w * h; i++) file >> map[i];
         if (!file.fail()) {
             file.close();
@@ -878,12 +881,6 @@ int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
     else if (!str.compare(TEXT("-h"))) {    //cmdl: -h
         ret = RETVAL_CMDHELP;
     }
-    else if (!str.compare(TEXT("-f"))) {    //cmdl: -f FILENAME
-        cmdl >> str;
-        if (!cmdl.fail()) {
-            ret = fromFile(str, hInstance, nCmdShow);
-        }
-    }
     else if (!str.compare(TEXT("-r"))) {    //cmdl: -r W H RATIO [PW]
         int w, h, pw = GLW_DEFPIXW;
         double ratio;
@@ -895,6 +892,9 @@ int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
             ret = runGame(pgl, hInstance, nCmdShow);
             delete pgl;
         }
+    }
+    else {  //cmdl: FILENAME
+        ret = fromFile(str, hInstance, nCmdShow);
     }
     return ret;
 }
@@ -919,16 +919,16 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdL
     int ret = fromCmdLine(lpCmdLine, hInstance, nCmdShow);
     switch (ret) {
     case RETVAL_CMDFAIL:
-        MessageBox(nullptr, TEXT("Invalid cmdl arguments"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
+        MessageBox(nullptr, TEXT("Invalid cmdl args\n" GLSTR_CMDHELP), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
         break;
     case RETVAL_CMDHELP:
-        MessageBox(nullptr, TEXT(GLCMD_HELP), TEXT(GLW_WNDNAME), MB_OK | MB_ICONINFORMATION);
+        MessageBox(nullptr, TEXT(GLSTR_CMDHELP "\n" GLSTR_FTDESC), TEXT(GLW_WNDNAME), MB_OK | MB_ICONINFORMATION);
         break;
     case RETVAL_ERRFOPEN:
         MessageBox(nullptr, TEXT("Fail to open file"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
         break;
     case RETVAL_BADFTYPE:
-        MessageBox(nullptr, TEXT("Error when reading file"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
+        MessageBox(nullptr, TEXT("Bad file contents"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
         break;
     }
     return ret;

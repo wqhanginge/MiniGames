@@ -15,25 +15,19 @@ A simple simulator for Conway's Game of Life.
 
 ## Run
 
-Double click to start a new game with default game map size and random initializing.
-
-Start a new game from command line with game map size 200x100, and 0.3 as the ratio of alive cells for random initializing.
+Directly run the program with default settings or drag an **init file** onto the executable to run with custom settings. Additionally, this program supports following command lines for custom initializations.
 ```sh
-gameoflife -r 200 100 0.3
+gameoflife -r <MapWidth> <MapHeight> <AliveRatio> [<PixelWidth>]    //random initialization
+gameoflife <FileName>   //file initialization
 ```
 
-Start a new game from command line, using a file to initialize the game map.
-```sh
-gameoflife -f gameoflife-map2.txt
-```
-
-### File Format
+### Init File Format
 
 ```txt
-<FileType> <Width> <Height> <PixelWidth> <Data>
+<FileType> <MapWidth> <MapHeight> <PixelWidth> <Data>
 ```
 
-There are **3** file types for a valid initial file: **Bitmap**, **Coord** and **Rect**. Each type is mapped to a unique integer. See below,
+There are **3** file types for a valid init file: **Bitmap**, **Coord** and **Rect**. Each type is mapped to a unique integer. See below,
 ```c++
 #define GLFT_BITMAP 0
 #define GLFT_COORD  1
@@ -44,7 +38,7 @@ There are **3** file types for a valid initial file: **Bitmap**, **Coord** and *
 
 The Data part should indicate the state of each cell in game map, 1 for alive and 0 for dead.
 ```txt
-0 <Width> <Height> <PixelWidth> 0 0 1 0 ... 1 0
+0 <MapWidth> <MapHeight> <PixelWidth> 0 0 1 0 ... 1 0
 ```
 
 An example is shown below,
@@ -59,7 +53,7 @@ An example is shown below,
 
 The Data part is a list of coordinates that indicating which cell is alive.
 ```txt
-1 <Width> <Height> <PixelWidth> [<x y> <x y> ...]
+1 <MapWidth> <MapHeight> <PixelWidth> [<x y> <x y> ...]
 ```
 
 An example is shown below,
@@ -74,7 +68,7 @@ An example is shown below,
 
 The Data part is a list of rectangles that indicating a region of cells are alive.
 ```txt
-2 <Width> <Height> <PixelWidth> [<left top right bottom> ...]
+2 <MapWidth> <MapHeight> <PixelWidth> [<left top right bottom> ...]
 ```
 
 An example is shown below,
@@ -115,10 +109,10 @@ An **unbounded** edge is a transparent edge that connects to the opposite side o
 
 When entering the 'insert' mode, you can press the **left mouse button** and drag to **add** new alive cells to map, or press the **right mouse button** and drag to **remove** existing alive cells on map.
 
-To remove all existing alive cells, press **BackSpace** on keyboard when in 'insert' mode. This operation can not be undone.
+To remove all existing alive cells, press **BackSpace** on keyboard when in 'insert' mode. It is **NOT** able to undo this operation.
 
 The 'insert' mode works only when game is paused. The simulator automatically exit the 'insert' mode if the game resumes from pause.
 
 ## Notes
 
-- C++17 is required.
+- C++17 is required for compiling.
