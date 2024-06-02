@@ -2,7 +2,7 @@
 
 **AppType: Console**
 
-Solve a specified 24 point problem.
+Solve a specified *24 Point* problem.
 
 ## Features
 

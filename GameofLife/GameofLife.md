@@ -2,14 +2,14 @@
 
 **AppType: Win32**
 
-A simple simulator for Conway's Game of Life.
+A simple simulator for Conway's *Game of Life*.
 
 ## Features
 
 - Support a custom game map size up to **65535x65535**.
 - Support initializing the game map randomly or from a file.
 - Support **2** types of map edges: **bounded** and **unbounded**.
-- Support changing the running speed.
+- Support multiple running speeds.
 - Support several different display sizes.
 - Support **insert mode**, which is allowed to modify the game map contents after initializing.
 
