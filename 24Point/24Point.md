@@ -17,18 +17,20 @@ Solve a specified *24 Point* problem.
 ### Syntax
 
 ```sh
-24point [-d] [-j <n>] [-o <file>] [-p | -P] [-r <min> <max>] <target> <num>[:...] [--op=<op>[...]]
+24point [-v] [-j <n>] [-o <file>] [-p | -m | -a] [-r <min> <max>] <target> <num>[:...] [--op=<op>[...]]
 
 Positional arguments:
   target                expected result value of expressions
   num                   non-negative integers as input numbers
 
 Optional arguments:
-  -d, --display-blanks  display number lists that have no solutions
+  -v, --verbose         display all results including those have no solutions
   -j, --jobs <n>        number of working threads, default to max available threads
   -o, --out <file>      output solutions into a file
-  -p, --prune           search only one solution for each different list of numbers
-  -P, --no-prune        search all possible solutions
+  -p, --prune           search one solution for one unique combination of number and
+                        operators, default option
+  -m, --max-prune       search only one solution for each different list of numbers
+  -a, --no-prune        search all possible solutions
   -r, --range <min> <max>
                         enable exhaustion mode to search solutions from ranged input
                         numbers, this interpret the first input number as the size of

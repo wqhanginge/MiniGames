@@ -28,10 +28,10 @@ using tstringstream = std::stringstream;
 
 #define WM_GLPAUSE      (WM_APP + 0)
 #define WM_GLINSERT     (WM_APP + 1)
-#define WM_GLSPEED      (WM_APP + 2)    //wparam is the gears to increase
-#define WM_GLZOOM       (WM_APP + 3)    //wparam is the pixels to zoom in, lparam is the mouse position
-#define WM_GLSETSCROLL  (WM_APP + 4)    //wparam is a BOOL indicating if redraw
-#define WM_GLSETTEXT    (WM_APP + 5)    //wparam is a BOOL indicating if lparam is valid, lparam is the mouse position
+#define WM_GLSPEED      (WM_APP + 2)    /* wparam is the gears to increase */
+#define WM_GLZOOM       (WM_APP + 3)    /* wparam is the pixels to zoom in, lparam is the mouse position */
+#define WM_GLSETSCROLL  (WM_APP + 4)    /* wparam is a BOOL indicating if redraw */
+#define WM_GLSETTEXT    (WM_APP + 5)    /* wparam is a BOOL indicating if lparam is valid, lparam is the mouse position */
 #define WM_GLHELP       (WM_APP + 6)
 
 #define GL_BIRTHCNT     3
@@ -46,7 +46,7 @@ using tstringstream = std::stringstream;
 #define GLWC_EXDATAOFF  0
 
 #define GLRT_SF_PAUSE   0x01
-#define GLRT_SF_INSERT  0x02    //should be used with GLRT_SF_PAUSE
+#define GLRT_SF_INSERT  0x02    /* should be used with GLRT_SF_PAUSE */
 #define GLRT_SF_HELP    0x10
 #define GLRT_SF_UNBOUND 0x20
 #define GLRT_GETSV(s)   ((BYTE)(s) & 0x0F)
@@ -146,7 +146,7 @@ public:
     static constexpr Val VERYFAST = { 25, 40, TEXT("Very Fast") };
     static constexpr Val EXFAST = { 10, 100, TEXT("Extremly Fast") };
 
-    Speed() :_pos(4) {}    //NORMAL
+    Speed() :_pos(4) {}     //NORMAL
     Speed(const Val& v) { _assign(v); }
 
     const Val& operator*() const { return *_val_list[_pos]; }

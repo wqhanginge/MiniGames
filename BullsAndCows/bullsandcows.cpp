@@ -17,10 +17,11 @@ static_assert(COUNT <= SYMBOLS.size(), "insufficient types of symbols");
 
 
 template<size_t Size>
-struct Bytes :public std::array<char, Size> {
-    static constexpr size_t SIZE = Size;
-    constexpr operator std::string() const { return std::string(this->data(), Size); }
-    constexpr operator std::string_view() const { return std::string_view(this->data(), Size); }
+class Bytes :public std::array<char, Size> {
+    using _Base = std::array<char, Size>;
+public:
+    constexpr explicit operator std::string() const { return std::string(_Base::data(), Size); }
+    constexpr explicit operator std::string_view() const { return std::string_view(_Base::data(), Size); }
 };
 
 using Guess = Bytes<COUNT>;
@@ -31,7 +32,7 @@ class SecretManager {
 public:
     SecretManager() :_secret(), _urng(std::random_device()()) {}
 
-    std::string string() const { return std::string(string_view()); }
+    std::string string() const { return static_cast<std::string>(_secret); }
     std::string_view string_view() const { return static_cast<std::string_view>(_secret); }
 
     void refresh(const bool master) {   //Mastermind gives non-unique digits, while Standard gives unique digits
@@ -73,15 +74,14 @@ inline bool isNotSpaceAndDigit(unsigned char c) {
     return !std::isspace(c) && !std::isdigit(c);
 }
 
-template<unsigned char alpha>
-inline bool equalAlpha(unsigned char c) {
-    return std::isalpha(c) && std::tolower(c) == std::tolower(alpha);
+inline bool equalAlpha(unsigned char c, unsigned char alpha) {
+    return std::isalpha(c) && std::isalpha(alpha) && std::tolower(c) == std::tolower(alpha);
 }
 
 bool readGuessFromLine(Guess& guess, std::string_view line, const bool master) {
     if (std::any_of(line.begin(), line.end(), isNotSpaceAndDigit))
         return false;
-    if (std::count_if(line.begin(), line.end(), isDigit) != guess.SIZE)
+    if (std::count_if(line.begin(), line.end(), isDigit) != guess.size())
         return false;
     std::copy_if(line.begin(), line.end(), guess.begin(), isDigit);
     if (!master && std::unique(guess.begin(), guess.end()) != guess.end())
@@ -91,7 +91,7 @@ bool readGuessFromLine(Guess& guess, std::string_view line, const bool master) {
 
 bool readYnFromLine(std::string_view line) {
     auto iter = std::find_if_not(line.begin(), line.end(), isSpace);
-    return iter != line.end() && equalAlpha<'y'>(*iter);
+    return iter != line.end() && equalAlpha(*iter, 'y');
 }
 
 
@@ -111,7 +111,7 @@ std::string title(const bool master) {
 std::string tips(const bool valid, const size_t turn, const Guess& guess, const size_t bulls, const size_t cows) {
     std::string str;
     str += std::string(40, ' ') + std::to_string(turn) + ".\t";
-    str += (valid) ? guess : std::string(guess.SIZE, ' ');
+    str += (valid) ? std::string(guess) : std::string(guess.size(), ' ');
     str += std::string(4, ' ');
     str += std::to_string(bulls) + 'A' + std::to_string(cows) + 'B';
     return str;
@@ -119,12 +119,12 @@ std::string tips(const bool valid, const size_t turn, const Guess& guess, const 
 
 std::string finish(const size_t used_chances, const SecretManager& secret_mgr) {
     std::string str;
-    if (used_chances <= CHANCES) {  //succeed
+    if (used_chances <= CHANCES) {  //win
         str += "Congratulations! You got the Answer: ";
         str += secret_mgr.string_view();
         str += "\nA total of " + std::to_string(used_chances) + " chances were consumed.";
     }
-    else {  //failed
+    else {  //loss
         str += "Sorry! You ran out of all chances.\n";
         str += "The Answer is: ";
         str += secret_mgr.string_view();
@@ -157,7 +157,7 @@ int main() {
             auto [bulls, cows] = (valid) ? secret_mgr.evaluate(guess) : Result(0, 0);
 
             std::cout << tips(valid, chance + 1, guess, bulls, cows) << std::endl;
-            if (bulls == guess.SIZE) break;
+            if (bulls == guess.size()) break;
             else chance++;
         }
         std::cout << '\n' << finish(chance + 1, secret_mgr) << '\n' << std::endl;

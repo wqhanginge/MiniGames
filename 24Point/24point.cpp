@@ -27,7 +27,7 @@ constexpr int MAX_NUMBER = 0x7F;
 constexpr char F_PRUNENUM = 0x01;   //if pruning at number level
 constexpr char F_PRUNEOPS = 0x02;   //if pruning at operator level
 constexpr char F_RANGENUM = 0x04;   //if ranged number list
-constexpr char F_DISPFULL = 0x08;   //if display numbers without any solution
+constexpr char F_SVERBOSE = 0x08;   //if display numbers without any solution
 
 constexpr Atom OP_ADD = 0x80;
 constexpr Atom OP_SUB = 0x81;
@@ -47,16 +47,18 @@ constexpr Atom OP_PRI_MSK = 0x02;   //high priority bit
 #pragma warning(pop)
 
 constexpr auto USAGE = "\
-24point [-d] [-j <n>] [-o <file>] [-p | -P] [-r <min> <max>] <target> <num>[:...] [--op=<op>[...]]\n\n\
+24point [-v] [-j <n>] [-o <file>] [-p | -m | -a] [-r <min> <max>] <target> <num>[:...] [--op=<op>[...]]\n\n\
 Positional arguments:\n\
   target                expected result value of expressions\n\
   num                   non-negative integers as input numbers\n\n\
 Optional arguments:\n\
-  -d, --display-blanks  display number lists that have no solutions\n\
+  -v, --verbose         display all results including those have no solutions\n\
   -j, --jobs <n>        number of working threads, default to max available threads\n\
   -o, --out <file>      output solutions into a file\n\
-  -p, --prune           search only one solution for each different list of numbers\n\
-  -P, --no-prune        search all possible solutions\n\
+  -p, --prune           search one solution for one unique combination of number and\n\
+                        operators, default option\n\
+  -m, --max-prune       search only one solution for each different list of numbers\n\
+  -a, --no-prune        search all possible solutions\n\
   -r, --range <min> <max>\n\
                         enable exhaustion mode to search solutions from ranged input\n\
                         numbers, this interpret the first input number as the size of\n\
@@ -265,7 +267,7 @@ void productPostfix(PostfixList& results, const PostfixList& postfixA, const Pos
     }
 }
 
-void filterDuplicateSolutions(PostfixList& filtered, const PostfixList& origin) {    
+void filterDuplicateSolutions(PostfixList& filtered, const PostfixList& origin) {
     for (auto& postfix : origin) {
         bool exist = false;
         for (auto iter = filtered.crbegin(); iter < filtered.crend() && isExpr(*iter); iter++) {
@@ -307,7 +309,7 @@ PostfixList solve() {
 
     PostfixList sols, sol_set;
     filterDuplicateSolutions(sol_set, sol_list);
-    if (args_.flags & F_DISPFULL) { //retain all outputs
+    if (args_.flags & F_SVERBOSE) { //retain all outputs
         sols += sol_set;
     }
     else {  //remove numbers which have no solutions
@@ -420,7 +422,7 @@ inline int nextValidArg(int argc, char* argv[], int idx = 0, int skip = 0) {
 
 int parseNumber(const char* arg, size_t start = 0, size_t stop = -1) {
     int x = 0, symbol = 0;
-    stop = std::min(stop, std::strlen(arg));
+    stop = std::min<size_t>(stop, std::strlen(arg));
     for (size_t i = start; i < stop; i++) {
         if (i == start && (arg[i] == '+' || arg[i] == '-')) {
             symbol = ',' - arg[i];
@@ -434,13 +436,13 @@ int parseNumber(const char* arg, size_t start = 0, size_t stop = -1) {
 }
 
 /* optional args:
- * [-d] [-j <n>] [-o <file>] [-p | -P] [-r <min> <max>] [--op=<op>[...]]
+ * [-v] [-j <n>] [-o <file>] [-p | -m | -a] [-r <min> <max>] [--op=<op>[...]]
  */
 int matchOptionalArgs(int argc, char* argv[], int idx, std::vector<bool>& parsed) {
-    if (!std::strcmp(argv[idx], "-d") || !std::strcmp(argv[idx], "--display-blanks")) { //display numbers without solutions
+    if (!std::strcmp(argv[idx], "-v") || !std::strcmp(argv[idx], "--verbose")) {    //display numbers without solutions
         condithrow(parsed.at(0), "duplicate option: " + std::string(argv[idx]));
 
-        args_.flags |= F_DISPFULL;
+        args_.flags |= F_SVERBOSE;
 
         parsed.at(0) = true;
         return 1;
@@ -467,26 +469,36 @@ int matchOptionalArgs(int argc, char* argv[], int idx, std::vector<bool>& parsed
         parsed.at(2) = true;
         return 2;
     }
-    else if (!std::strcmp(argv[idx], "-p") || !std::strcmp(argv[idx], "--prune")) { //prune at number level
+    else if (!std::strcmp(argv[idx], "-p") || !std::strcmp(argv[idx], "--prune")) { //prune at operator level
         condithrow(parsed.at(3), "duplicate option: " + std::string(argv[idx]));
-        condithrow(parsed.at(4), "conflicting option: " + std::string(argv[idx]));
+        condithrow(parsed.at(4) || parsed.at(5), "conflicting option: " + std::string(argv[idx]));
 
-        args_.flags |= (F_PRUNENUM | F_PRUNEOPS);
+        args_.flags &= ~F_PRUNENUM;
+        args_.flags |= F_PRUNEOPS;
 
         parsed.at(3) = true;
         return 1;
     }
-    else if (!std::strcmp(argv[idx], "-P") || !std::strcmp(argv[idx], "--no-prune")) {  //suppress any pruning
+    else if (!std::strcmp(argv[idx], "-m") || !std::strcmp(argv[idx], "--max-prune")) { //prune at number level
         condithrow(parsed.at(4), "duplicate option: " + std::string(argv[idx]));
-        condithrow(parsed.at(3), "conflicting option: " + std::string(argv[idx]));
+        condithrow(parsed.at(3) || parsed.at(5), "conflicting option: " + std::string(argv[idx]));
 
-        args_.flags &= ~(F_PRUNENUM | F_PRUNEOPS);
+        args_.flags |= (F_PRUNENUM | F_PRUNEOPS);
 
         parsed.at(4) = true;
         return 1;
     }
-    else if (!std::strcmp(argv[idx], "-r") || !std::strcmp(argv[idx], "--range")) { //enable exhaustion mode
+    else if (!std::strcmp(argv[idx], "-a") || !std::strcmp(argv[idx], "--no-prune")) {  //suppress any pruning
         condithrow(parsed.at(5), "duplicate option: " + std::string(argv[idx]));
+        condithrow(parsed.at(3) || parsed.at(4), "conflicting option: " + std::string(argv[idx]));
+
+        args_.flags &= ~(F_PRUNENUM | F_PRUNEOPS);
+
+        parsed.at(5) = true;
+        return 1;
+    }
+    else if (!std::strcmp(argv[idx], "-r") || !std::strcmp(argv[idx], "--range")) { //enable exhaustion mode
+        condithrow(parsed.at(6), "duplicate option: " + std::string(argv[idx]));
 
         args_.flags |= F_RANGENUM;
         int imin = nextValidArg(argc, argv, idx);
@@ -497,11 +509,11 @@ int matchOptionalArgs(int argc, char* argv[], int idx, std::vector<bool>& parsed
         condithrow(args_.rmin < MIN_NUMBER || args_.rmax > MAX_NUMBER, "number too large or too small");
         condithrow(args_.rmin > args_.rmax, "invalid range");
 
-        parsed.at(5) = true;
+        parsed.at(6) = true;
         return 3;
     }
     else if (!std::strncmp(argv[idx], "--op=", 5)) {    //specify operators
-        condithrow(parsed.at(6), "duplicate option: " + std::string(argv[idx]));
+        condithrow(parsed.at(7), "duplicate option: " + std::string(argv[idx]));
 
         for (int i = 0; 5 + i < std::strlen(argv[idx]); i++) {
             Atom a = encode(argv[idx][5 + i]);
@@ -509,7 +521,7 @@ int matchOptionalArgs(int argc, char* argv[], int idx, std::vector<bool>& parsed
             args_.operators += a;
         }
 
-        parsed.at(6) = true;
+        parsed.at(7) = true;
         return 1;
     }
     return 0;
@@ -556,13 +568,13 @@ bool parseArgs(int argc, char* argv[]) {
     }
 
     //default value of args
-    int max_threads = std::thread::hardware_concurrency();
+    int hwthreads = std::max<int>(std::thread::hardware_concurrency(), 1);
     args_.flags = F_PRUNEOPS;
-    args_.nthreads = max_threads;
+    args_.nthreads = hwthreads;
 
     try {
         int curr_pos = 0;   //init state for positionsl args
-        std::vector<bool> parsed_options(7, false); //init state for options
+        std::vector<bool> parsed_options(8, false); //init state for options
 
         int ret, idx = nextValidArg(argc, argv, 0);
         for (; idx >= 0; idx = nextValidArg(argc, argv, idx, ret - 1)) {    //parse options first
@@ -585,11 +597,11 @@ bool parseArgs(int argc, char* argv[]) {
         args_.numbers = args_.numbers.substr(1, args_.size - 1);
     }
     args_.operators = args_.operators.substr(0, args_.size - 1);
-    if (args_.nthreads > max_threads * 2) {
+    if (args_.nthreads > hwthreads * 2) {
         std::cerr << "warning: too large value for jobs: " << args_.nthreads;
-        std::cerr << ", is limited to: " << max_threads * 2 << std::endl;
+        std::cerr << ", is limited to: " << hwthreads * 2 << std::endl;
     }
-    args_.nthreads = std::min<int>(args_.nthreads, max_threads * 2);
+    args_.nthreads = std::min<int>(args_.nthreads, hwthreads * 2);
     return true;
 }
 
