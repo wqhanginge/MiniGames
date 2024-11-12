@@ -13,4 +13,4 @@ This repository is a collection of several one-source-file minigames.
 ## License
 
 Copyright (C) 2023 Gee Wang.  
-Licensed under the [GNU GPL v3](./LICENSE) license.
+Licensed under the [GNU GPL v3](./LICENSE).

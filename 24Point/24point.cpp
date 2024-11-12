@@ -70,8 +70,7 @@ Optional arguments:\n\
 
 class ParseError : public std::logic_error {
 public:
-    explicit ParseError(const std::string& msg) :std::logic_error(msg.c_str()) {}
-    explicit ParseError(const char* msg) :std::logic_error(msg) {}
+    using std::logic_error::logic_error;
 };
 
 struct Args {
