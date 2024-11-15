@@ -572,7 +572,7 @@ bool parseArgs(int argc, char* argv[]) {
     args_.nthreads = hwthreads;
 
     try {
-        int curr_pos = 0;   //init state for positionsl args
+        int curr_pos = 0;   //init state for positional args
         std::vector<bool> parsed_options(8, false); //init state for options
 
         int ret, idx = nextValidArg(argc, argv, 0);
