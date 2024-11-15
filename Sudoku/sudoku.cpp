@@ -2,7 +2,7 @@
 #include <fstream>
 
 #include <array>
-#include <deque>
+#include <vector>
 #include <string>
 
 #include <cstring>
@@ -19,15 +19,13 @@ public:
     explicit SudokuMap(const std::string_view map);
 
     std::string string() const;
-    SudokuMap solve();
-    size_t search(std::deque<SudokuMap>& results);
+    size_t solve(std::vector<SudokuMap>& results);
 
 private:
     std::array<char, MAP> _map;
 
     bool _unique(size_t idx);
     size_t _next_blank(size_t idx);
-    size_t _solve_recursive(std::deque<SudokuMap>& sols, size_t idx);
 };
 
 
@@ -55,31 +53,29 @@ std::string SudokuMap::string() const {
     return str;
 }
 
-SudokuMap SudokuMap::solve() {
-    std::deque<std::pair<size_t, size_t>> stack = { { _next_blank(0), 0 }};
+size_t SudokuMap::solve(std::vector<SudokuMap>& results) {
+    size_t cnt = 0;
+    std::vector<std::pair<size_t, size_t>> stack = { { 0, 0 } };
     while (!stack.empty()) {
-        auto& [imap, idigit] = stack.back();
+        auto [imap, idigit] = stack.back();
+        stack.pop_back();
 
-        if (imap >= _map.size()) {
-            return SudokuMap(*this);
-        }
-
-        if (idigit < DIGITS.size()) {
-            _map[imap] = DIGITS[idigit];
-            if (_unique(imap)) stack.emplace_back(std::pair{ _next_blank(imap + 1), 0 });
-            idigit++;
+        size_t iblank = _next_blank(imap);
+        if (iblank >= _map.size()) {
+            results.push_back(*this);
+            cnt++;
             continue;
         }
 
-        _map[imap] = BLANK;
-        stack.pop_back();
-    }
-    return SudokuMap();
-}
+        if (idigit < DIGITS.size()) {
+            _map[iblank] = DIGITS[idigit++];
+            if (_unique(iblank)) stack.emplace_back(std::pair{ iblank + 1, 0 });
+            continue;
+        }
 
-size_t SudokuMap::search(std::deque<SudokuMap>& results) {
-    size_t idx = _next_blank(0);
-    return (idx < _map.size()) ? _solve_recursive(results, idx) : 0;
+        _map[iblank] = BLANK;
+    }
+    return cnt;
 }
 
 bool SudokuMap::_unique(size_t idx) {
@@ -106,27 +102,11 @@ size_t SudokuMap::_next_blank(size_t idx) {
     return idx;
 }
 
-size_t SudokuMap::_solve_recursive(std::deque<SudokuMap>& sols, size_t idx) {
-    if (idx >= _map.size()) {
-        sols.push_back(*this);
-        return 1;
-    }
-
-    size_t cnt = 0, next = _next_blank(idx + 1);
-    for (auto digit : DIGITS) {
-        _map[idx] = digit;
-        if (_unique(idx)) cnt += _solve_recursive(sols, next);
-    }
-    _map[idx] = BLANK;
-    return cnt;
-}
-
 
 int main() {
     SudokuMap smap("007008000095002600000100250010000079600009000008004000000000000006400800030050020");
-    std::deque<SudokuMap> sols;
-    std::cout << smap.string() << '\n' << smap.search(sols) << std::endl;
+    std::vector<SudokuMap> sols;
+    std::cout << smap.string() << '\n' << smap.solve(sols) << std::endl;
     for (auto& sol : sols) std::cout << sol.string() << std::endl;
-    std::cout << smap.solve().string() << std::endl;
     return 0;
 }
