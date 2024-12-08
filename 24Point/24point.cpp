@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include <string>
+#include <array>
 #include <stack>
 #include <vector>
 
@@ -47,19 +48,19 @@ constexpr Atom OP_PRI_MSK = 0x02;   //high priority bit
 #pragma warning(pop)
 
 constexpr auto USAGE = "\
-24point [-v] [-j <n>] [-o <file>] [-p | -m | -a] [-r <min> <max>] <target> <num>[:...] [--op=<op>[...]]\n\n\
+24point [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] <target> <num>[:...] [--op=<op>[...]]\n\n\
 Positional arguments:\n\
   target                expected result value of expressions\n\
   num                   non-negative integers as input numbers\n\n\
 Optional arguments:\n\
   -v, --verbose         display all results including those have no solutions\n\
-  -j, --jobs <n>        number of working threads, default to max available threads\n\
+  -j, --jobs <n>        specify the max available working threads\n\
   -o, --out <file>      output solutions into a file\n\
-  -p, --prune           search one solution for one unique combination of number and\n\
-                        operators, default option\n\
-  -m, --max-prune       search only one solution for each different list of numbers\n\
-  -a, --no-prune        search all possible solutions\n\
-  -r, --range <min> <max>\n\
+  -p, --prune <level>   set the prune level for the solve process as <std|max|off>,\n\
+                        <std> prune expressions with the same operators (default),\n\
+                        <max> prune expressions with the same numbers and operators,\n\
+                        <off> do not prune expressions\n\
+  -r, --range <min>:<max>\n\
                         enable exhaustion mode to search solutions from ranged input\n\
                         numbers, this interpret the first input number as the size of\n\
                         each number list and ignore excess input numbers\n\
@@ -253,7 +254,7 @@ size_t exhaustCCount(const int min, const int max, const size_t size) {
     if (min > max) return 0;
     double s = 1, d = max - min, n = 0;
     while (n < size) s *= ++d / ++n;
-    return (size_t)s;
+    return static_cast<size_t>(s);
 }
 
 void productPostfix(PostfixList& results, const PostfixList& postfixA, const PostfixList& postfixB) {
@@ -405,122 +406,92 @@ std::string formatArgs() {
 }
 
 
-inline void condithrow(const bool condition, const char* message) {
-    if (condition) throw ParseError(message);
+inline void assert(const bool condition, const char* message) {
+    if (!condition) throw ParseError(message);
 }
 
-inline void condithrow(const bool condition, const std::string& message) {
-    if (condition) throw ParseError(message);
+inline void assert(const bool condition, const std::string& message) {
+    if (!condition) throw ParseError(message);
 }
 
-inline int nextValidArg(int argc, char* argv[], int idx = 0, int skip = 0) {
-    idx += skip;
-    do { ++idx; } while (idx < argc && !argv[idx]);
-    return (idx < argc && argv[idx]) ? idx : -argc;
-}
-
-int parseNumber(const char* arg, size_t start = 0, size_t stop = -1) {
-    int x = 0, symbol = 0;
-    stop = std::min<size_t>(stop, std::strlen(arg));
-    for (size_t i = start; i < stop; i++) {
-        if (i == start && (arg[i] == '+' || arg[i] == '-')) {
-            symbol = ',' - arg[i];
-            continue;
-        }
-        condithrow(arg[i] < '0' || arg[i] > '9', "invalid number");
-        x = x * 10 + arg[i] - '0';
-    }
-    condithrow(start + bool(symbol) >= stop, "invalid number");
-    return x * (!symbol + symbol);
+inline int argtoi(const std::string& str, size_t* idx = nullptr, int base = 10) {
+    try { return std::stoi(str, idx, base); }
+    catch (std::exception& e) { throw ParseError(e.what()); }
 }
 
 /* optional args:
- * [-v] [-j <n>] [-o <file>] [-p | -m | -a] [-r <min> <max>] [--op=<op>[...]]
+ * [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] [--op=<op>[...]]
  */
-int matchOptionalArgs(int argc, char* argv[], int idx, std::vector<bool>& parsed) {
+int matchOptionalArgs(int argc, char* argv[], int idx, std::array<bool, 6>& parsed) {
     if (!std::strcmp(argv[idx], "-v") || !std::strcmp(argv[idx], "--verbose")) {    //display numbers without solutions
-        condithrow(parsed.at(0), "duplicate option: " + std::string(argv[idx]));
+        assert(!parsed[0], "duplicate option: " + std::string(argv[idx]));
 
         args_.flags |= F_SVERBOSE;
 
-        parsed.at(0) = true;
+        parsed[0] = true;
         return 1;
     }
-    else if (!std::strcmp(argv[idx], "-j") || !std::strcmp(argv[idx], "--jobs")) {  //specify working threads
-        condithrow(parsed.at(1), "duplicate option: " + std::string(argv[idx]));
+    else if (!std::strcmp(argv[idx], "-j") || !std::strcmp(argv[idx], "--jobs")) {  //specify max working threads
+        assert(!parsed[1], "duplicate option: " + std::string(argv[idx]));
+        assert(idx + 1 < argc, "unspecified value for jobs");
 
-        int ijob = nextValidArg(argc, argv, idx);
-        condithrow(ijob < 0, "unspecified value for jobs");
-        args_.nthreads = parseNumber(argv[ijob]);
-        condithrow(args_.nthreads <= 0, "invalid value for jobs");
+        size_t cnt = 0;
+        args_.nthreads = argtoi(argv[idx + 1], &cnt);
+        assert(cnt == std::strlen(argv[idx + 1]), "invalid value for jobs");
+        assert(args_.nthreads > 0, "invalid value for jobs");
 
-        parsed.at(1) = true;
+        parsed[1] = true;
         return 2;
     }
     else if (!std::strcmp(argv[idx], "-o") || !std::strcmp(argv[idx], "--out")) {   //specify output file
-        condithrow(parsed.at(2), "duplicate option: " + std::string(argv[idx]));
+        assert(!parsed[2], "duplicate option: " + std::string(argv[idx]));
+        assert(idx + 1 < argc, "unspecified file name");
 
-        int ifile = nextValidArg(argc, argv, idx);
-        condithrow(ifile < 0, "unspecified file name");
-        args_.outfile.open(argv[ifile], std::ios_base::out | std::ios_base::trunc);
-        condithrow(!args_.outfile.is_open(), "unable to open file: " + std::string(argv[ifile]));
+        args_.outfile.open(argv[idx + 1], std::ios_base::out | std::ios_base::trunc);
+        assert(args_.outfile.is_open(), "unable to open file: " + std::string(argv[idx + 1]));
 
-        parsed.at(2) = true;
+        parsed[2] = true;
         return 2;
     }
-    else if (!std::strcmp(argv[idx], "-p") || !std::strcmp(argv[idx], "--prune")) { //prune at operator level
-        condithrow(parsed.at(3), "duplicate option: " + std::string(argv[idx]));
-        condithrow(parsed.at(4) || parsed.at(5), "conflicting option: " + std::string(argv[idx]));
+    else if (!std::strcmp(argv[idx], "-p") || !std::strcmp(argv[idx], "--prune")) { //specify prune level
+        assert(!parsed[3], "duplicate option: " + std::string(argv[idx]));
+        assert(idx + 1 < argc, "unspecified prune level");
 
-        args_.flags &= ~F_PRUNENUM;
-        args_.flags |= F_PRUNEOPS;
+        if (!std::strcmp(argv[idx + 1], "std")) args_.flags = args_.flags & ~F_PRUNENUM | F_PRUNEOPS;
+        else if (!std::strcmp(argv[idx + 1], "max")) args_.flags |= (F_PRUNENUM | F_PRUNEOPS);
+        else if (!std::strcmp(argv[idx + 1], "off")) args_.flags &= ~(F_PRUNENUM | F_PRUNEOPS);
+        else throw ParseError("unknow prune level");
 
-        parsed.at(3) = true;
-        return 1;
-    }
-    else if (!std::strcmp(argv[idx], "-m") || !std::strcmp(argv[idx], "--max-prune")) { //prune at number level
-        condithrow(parsed.at(4), "duplicate option: " + std::string(argv[idx]));
-        condithrow(parsed.at(3) || parsed.at(5), "conflicting option: " + std::string(argv[idx]));
-
-        args_.flags |= (F_PRUNENUM | F_PRUNEOPS);
-
-        parsed.at(4) = true;
-        return 1;
-    }
-    else if (!std::strcmp(argv[idx], "-a") || !std::strcmp(argv[idx], "--no-prune")) {  //suppress any pruning
-        condithrow(parsed.at(5), "duplicate option: " + std::string(argv[idx]));
-        condithrow(parsed.at(3) || parsed.at(4), "conflicting option: " + std::string(argv[idx]));
-
-        args_.flags &= ~(F_PRUNENUM | F_PRUNEOPS);
-
-        parsed.at(5) = true;
-        return 1;
+        parsed[3] = true;
+        return 2;
     }
     else if (!std::strcmp(argv[idx], "-r") || !std::strcmp(argv[idx], "--range")) { //enable exhaustion mode
-        condithrow(parsed.at(6), "duplicate option: " + std::string(argv[idx]));
+        assert(!parsed[4], "duplicate option: " + std::string(argv[idx]));
+        assert(idx + 1 < argc, "insufficient arguments for range");
 
+        size_t cnt, off = 0;
+        args_.rmin = argtoi(argv[idx + 1] + off, &cnt);
+        assert(argv[idx + 1][off + cnt] == ':', "invalid arguments for range");
+        off += cnt + 1;
+        args_.rmax = argtoi(argv[idx + 1] + off, &cnt);
+        assert(argv[idx + 1][off + cnt] == '\0', "invalid arguments for range");
+        assert(args_.rmin >= MIN_NUMBER && args_.rmax <= MAX_NUMBER, "range out of bounds");
+        assert(args_.rmin <= args_.rmax, "invalid range");
         args_.flags |= F_RANGENUM;
-        int imin = nextValidArg(argc, argv, idx);
-        int imax = nextValidArg(argc, argv, idx, 1);
-        condithrow(imin < 0 || imax < 0, "insufficient arguments for range");
-        args_.rmin = parseNumber(argv[imin]);
-        args_.rmax = parseNumber(argv[imax]);
-        condithrow(args_.rmin < MIN_NUMBER || args_.rmax > MAX_NUMBER, "number too large or too small");
-        condithrow(args_.rmin > args_.rmax, "invalid range");
 
-        parsed.at(6) = true;
-        return 3;
+        parsed[4] = true;
+        return 2;
     }
     else if (!std::strncmp(argv[idx], "--op=", 5)) {    //specify operators
-        condithrow(parsed.at(7), "duplicate option: " + std::string(argv[idx]));
+        assert(!parsed[5], "duplicate option: " + std::string(argv[idx]));
 
         for (int i = 0; 5 + i < std::strlen(argv[idx]); i++) {
             Atom a = encode(argv[idx][5 + i]);
-            condithrow(a < OP_MIN || a> OP_MAX, "invalid operator");
+            assert(a >= OP_MIN && a <= OP_MAX, "invalid operator");
             args_.operators += a;
         }
 
-        parsed.at(7) = true;
+        parsed[5] = true;
         return 1;
     }
     return 0;
@@ -532,19 +503,21 @@ int matchOptionalArgs(int argc, char* argv[], int idx, std::vector<bool>& parsed
 int matchPositionalArgs(int argc, char* argv[], int idx, int& pos) {
     switch (pos) {
     case 0: {   //target: integer
-        args_.target = parseNumber(argv[idx]);
+        size_t cnt = 0;
+        args_.target = argtoi(argv[idx], &cnt);
+        assert(cnt == std::strlen(argv[idx]), "invalid target");
 
         pos++;
         return 1;
     }
     case 1: {   //number list: non-negative integer with limitation
-        for (int i = 0, j = 0; i <= std::strlen(argv[idx]); i = ++j) {
-            while (argv[idx][j] != '\0' && argv[idx][j] != ':') j++;
-            int num = parseNumber(argv[idx], i, j);
-            condithrow(num < MIN_NUMBER || num > MAX_NUMBER, "number too large or too small");
+        for (size_t cnt, off = 0; off < std::strlen(argv[idx]); off += cnt + 1) {
+            int num = argtoi(argv[idx] + off, &cnt);
+            assert(argv[idx][off + cnt] == ':' || argv[idx][off + cnt] == '\0', "invalid number");
+            assert(num >= MIN_NUMBER && num <= MAX_NUMBER, "number out of range");
             args_.numbers += num;
         }
-        condithrow(args_.numbers.empty(), "empty input numbers");
+        assert(!args_.numbers.empty(), "empty input numbers");
 
         pos++;
         return 1;
@@ -567,22 +540,21 @@ bool parseArgs(int argc, char* argv[]) {
     }
 
     //default value of args
-    int hwthreads = std::max<int>(std::thread::hardware_concurrency(), 1);
+    unsigned hwthreads = std::thread::hardware_concurrency();
     args_.flags = F_PRUNEOPS;
-    args_.nthreads = hwthreads;
+    args_.nthreads = std::max<int>(hwthreads, 1);
 
     try {
         int curr_pos = 0;   //init state for positional args
-        std::vector<bool> parsed_options(8, false); //init state for options
+        std::array<bool, 6> parsed_options = {};    //init state for options
 
-        int ret, idx = nextValidArg(argc, argv, 0);
-        for (; idx >= 0; idx = nextValidArg(argc, argv, idx, ret - 1)) {    //parse options first
+        for (int ret, idx = 1; idx < argc; idx += ret) {    //parse options first
             if (ret = matchOptionalArgs(argc, argv, idx, parsed_options)) continue;
             if (ret = matchPositionalArgs(argc, argv, idx, curr_pos)) continue;
             throw ParseError("unknow argument: " + std::string(argv[idx]));
         }
 
-        condithrow(curr_pos < 2, "missing arguments");  //lack of positional args
+        assert(curr_pos >= 2, "missing arguments"); //lack of positional args
     }
     catch (ParseError& pe) {
         std::cerr << pe.what() << std::endl;
@@ -590,17 +562,13 @@ bool parseArgs(int argc, char* argv[]) {
     }
 
     //post processing for args
-    args_.size = (int)args_.numbers.size();
+    args_.size = static_cast<int>(args_.numbers.size());
     if (args_.flags & F_RANGENUM) { //exhaustion mode, at least 1 number is ranged
         args_.size = args_.numbers[0];
         args_.numbers = args_.numbers.substr(1, args_.size - 1);
     }
     args_.operators = args_.operators.substr(0, args_.size - 1);
-    if (args_.nthreads > hwthreads * 2) {
-        std::cerr << "warning: too large value for jobs: " << args_.nthreads;
-        std::cerr << ", is limited to: " << hwthreads * 2 << std::endl;
-    }
-    args_.nthreads = std::min<int>(args_.nthreads, hwthreads * 2);
+    args_.nthreads = (hwthreads) ? std::min<int>(args_.nthreads, hwthreads) : args_.nthreads;
     return true;
 }
 

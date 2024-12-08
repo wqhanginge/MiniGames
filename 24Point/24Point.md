@@ -17,7 +17,7 @@ Solve a specified *24 Point* problem.
 ### Syntax
 
 ```sh
-24point [-v] [-j <n>] [-o <file>] [-p | -m | -a] [-r <min> <max>] <target> <num>[:...] [--op=<op>[...]]
+24point [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] <target> <num>[:...] [--op=<op>[...]]
 
 Positional arguments:
   target                expected result value of expressions
@@ -25,13 +25,13 @@ Positional arguments:
 
 Optional arguments:
   -v, --verbose         display all results including those have no solutions
-  -j, --jobs <n>        number of working threads, default to max available threads
+  -j, --jobs <n>        specify the max available working threads
   -o, --out <file>      output solutions into a file
-  -p, --prune           search one solution for one unique combination of number and
-                        operators, default option
-  -m, --max-prune       search only one solution for each different list of numbers
-  -a, --no-prune        search all possible solutions
-  -r, --range <min> <max>
+  -p, --prune <level>   set the prune level for the solve process as <std|max|off>,
+                        <std> prune expressions with the same operators (default),
+                        <max> prune expressions with the same numbers and operators,
+                        <off> do not prune expressions
+  -r, --range <min>:<max>
                         enable exhaustion mode to search solutions from ranged input
                         numbers, this interpret the first input number as the size of
                         each number list and ignore excess input numbers
@@ -53,7 +53,7 @@ Solve a 32 point problem for fixed input numbers with specified operators.
 
 Solve a 48 point problem for all combinations of 3 input numbers from range [1, 9], and search for only one suitable expression for each combination.
 ```sh
-24point -p 48 3 -r 1 9
+24point -p max 48 3 -r 1:9
 ```
 
 ## Notes
