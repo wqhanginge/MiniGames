@@ -18,17 +18,6 @@ constexpr char BLANK = DIGITS[0];
 class SudokuMap :public std::array<char, MAP> {
     using _Base = std::array<char, MAP>;
     size_t _doff(size_t offset) const { return static_cast<size_t>(_Base::at(offset) - BLANK); }
-    size_t _next(size_t offset) const { while (offset < MAP && _doff(offset)) offset++; return offset; }
-
-    bool _solve(size_t offset) {
-        if (offset >= MAP) return true;
-        for (auto digit : DIGITS.substr(1)) {
-            _Base::at(offset) = digit;
-            if (unique(offset) && _solve(_next(offset))) return true;
-        }
-        _Base::at(offset) = BLANK;
-        return false;
-    }
 
 public:
     SudokuMap() { _Base::fill(BLANK); }
@@ -51,13 +40,37 @@ public:
         }
         return !duplicate;
     }
-
-    SudokuMap& solve() { _solve(_next(0)); return *this; }
 };
+
+using OffsetList = std::vector<size_t>;
+using OffsetIter = OffsetList::iterator;
+
+
+bool _solveRecursive(SudokuMap& map, const OffsetIter it, const OffsetIter end) {
+    if (it == end) return true;
+    for (auto digit : DIGITS.substr(1)) {
+        map[*it] = digit;
+        if (map.unique(*it) && _solveRecursive(map, it + 1, end)) return true;
+    }
+    map[*it] = BLANK;
+    return false;
+}
+
+SudokuMap solve(const SudokuMap& map) {
+    SudokuMap solution = map;
+    OffsetList offlist;
+    for (size_t off = 0; off < solution.size(); off++) {
+        if (solution[off] == BLANK) offlist.push_back(off);
+    }
+    _solveRecursive(solution, offlist.begin(), offlist.end());
+    return solution;
+}
 
 
 int main() {
     SudokuMap smap("007008000095002600000100250010000079600009000008004000000000000006400800030050020");
-    std::cout << std::string_view(smap) << '\n' << std::string_view(smap.solve());
+    std::cout << std::string_view(smap) << '\n' << std::string_view(solve(smap)) << std::endl;
+    try { std::cout << smap.unique(-1) << std::endl; }
+    catch (std::exception& e) { std::cout << e.what() << std::endl; }
     return 0;
 }
