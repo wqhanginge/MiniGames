@@ -19,13 +19,13 @@ public:
     explicit SudokuMap(const std::string_view map);
 
     std::string string() const;
-    size_t solve(std::vector<SudokuMap>& results);
+    size_t solve(std::vector<SudokuMap>& results, size_t offset = 0);
 
 private:
     std::array<char, MAP> _map;
 
-    bool _unique(size_t idx);
-    size_t _next_blank(size_t idx);
+    bool _unique(size_t offset);
+    size_t _next_blank(size_t offset);
 };
 
 
@@ -53,33 +53,23 @@ std::string SudokuMap::string() const {
     return str;
 }
 
-size_t SudokuMap::solve(std::vector<SudokuMap>& results) {
-    size_t cnt = 0;
-    std::vector<std::pair<size_t, size_t>> stack = { { 0, 0 } };
-    while (!stack.empty()) {
-        auto [imap, idigit] = stack.back();
-        stack.pop_back();
-
-        size_t iblank = _next_blank(imap);
-        if (iblank >= _map.size()) {
-            results.push_back(*this);
-            cnt++;
-            continue;
-        }
-
-        if (idigit < DIGITS.size()) {
-            _map[iblank] = DIGITS[idigit++];
-            if (_unique(iblank)) stack.emplace_back(std::pair{ iblank + 1, 0 });
-            continue;
-        }
-
-        _map[iblank] = BLANK;
+size_t SudokuMap::solve(std::vector<SudokuMap>& results, size_t offset /* 0 */) {
+    size_t cnt = 0, pos = _next_blank(offset);
+    if (pos >= _map.size()) {
+        results.push_back(*this);
+        return 1;
     }
+
+    for (auto digit : DIGITS) {
+        _map[pos] = digit;
+        if (_unique(pos)) cnt += solve(results, pos + 1);
+    }
+    _map[pos] = BLANK;
     return cnt;
 }
 
-bool SudokuMap::_unique(size_t idx) {
-    size_t x = idx / ROW, y = idx % ROW, bx = x / SEG * SEG, by = y / SEG * SEG;
+bool SudokuMap::_unique(size_t offset) {
+    size_t x = offset / ROW, y = offset % ROW, bx = x / SEG * SEG, by = y / SEG * SEG;
     size_t frow = 0, fcol = 0, fblk = 0, flag;
     for (size_t i = 0; i < ROW; i++) {  //size_t is at least 16 bits
         flag = size_t(2) << (sizeof(size_t) * 8 - 1 - size_t(_map[x * ROW + i] - BLANK));
@@ -97,9 +87,9 @@ bool SudokuMap::_unique(size_t idx) {
     return true;
 }
 
-size_t SudokuMap::_next_blank(size_t idx) {
-    while (idx < _map.size() && _map[idx] != BLANK) idx++;
-    return idx;
+size_t SudokuMap::_next_blank(size_t offset) {
+    while (offset < _map.size() && _map[offset] != BLANK) offset++;
+    return offset;
 }
 
 
