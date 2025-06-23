@@ -42,11 +42,11 @@ public:
     }
 };
 
-using OffsetList = std::vector<size_t>;
-using OffsetIter = OffsetList::iterator;
+using BlankList = std::vector<size_t>;
+using BlankIter = BlankList::iterator;
 
 
-bool _solveRecursive(SudokuMap& map, const OffsetIter it, const OffsetIter end) {
+bool _solveRecursive(SudokuMap& map, const BlankIter it, const BlankIter end) {
     if (it == end) return true;
     for (auto digit : DIGITS.substr(1)) {
         map[*it] = digit;
@@ -58,11 +58,11 @@ bool _solveRecursive(SudokuMap& map, const OffsetIter it, const OffsetIter end) 
 
 SudokuMap solve(const SudokuMap& map) {
     SudokuMap solution = map;
-    OffsetList offlist;
+    BlankList blanks;
     for (size_t off = 0; off < solution.size(); off++) {
-        if (solution[off] == BLANK) offlist.push_back(off);
+        if (solution[off] == BLANK) blanks.push_back(off);
     }
-    _solveRecursive(solution, offlist.begin(), offlist.end());
+    _solveRecursive(solution, blanks.begin(), blanks.end());
     return solution;
 }
 
