@@ -6,18 +6,22 @@ Solve a specified *24 Point* problem.
 
 ## Features
 
-- Support **any integer** as the target number.
-- Support **non-negative integers that less than 127** as the input numbers.
-- Support **[+, -, \*, /]** as operators.
-- Support an **exhaustion mode** for unfixed input numbers.
-- Using multi-threading by default.
+- Accept a custom **integer** as the target number.
+- All input numbers must be **non-negative integers** smaller than **128**.
+- Only the four **basic arithmetic operations** (+, -, \*, /) are valid.
+- Finding solutions for varying input numbers is achievable through **exhaustion mode**.
+- Basic multi-threading support.
+
+## Build Notes
+
+- C++11 standard is required for compiling.
 
 ## Usage
 
 ### Syntax
 
 ```sh
-24point [-v] [-j <n>] [-o <file>] [-p | -m | -a] [-r <min> <max>] <target> <num>[:...] [--op=<op>[...]]
+24point [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] <target> <num>[:...] [--op=<op>[...]]
 
 Positional arguments:
   target                expected result value of expressions
@@ -25,13 +29,13 @@ Positional arguments:
 
 Optional arguments:
   -v, --verbose         display all results including those have no solutions
-  -j, --jobs <n>        number of working threads, default to max available threads
+  -j, --jobs <n>        specify the max available working threads
   -o, --out <file>      output solutions into a file
-  -p, --prune           search one solution for one unique combination of number and
-                        operators, default option
-  -m, --max-prune       search only one solution for each different list of numbers
-  -a, --no-prune        search all possible solutions
-  -r, --range <min> <max>
+  -p, --prune <level>   set the prune level for the solving process as <std|max|off>,
+                        <std> prune expressions with the same operators (default),
+                        <max> prune expressions with the same numbers and operators,
+                        <off> do not prune expressions
+  -r, --range <min>:<max>
                         enable exhaustion mode to search solutions from ranged input
                         numbers, this interpret the first input number as the size of
                         each number list and ignore excess input numbers
@@ -41,21 +45,22 @@ Optional arguments:
 
 ### Examples
 
-Solve a 24 point problem for fixed input numbers.
+Solve a 24-point problem using fixed input numbers.
 ```sh
 24point 24 5:6:7:6
 ```
 
-Solve a 32 point problem for fixed input numbers with specified operators.
+Solve a 32-point problem using fixed input numbers with specified operators.
 ```sh
 24point 32 4:3:6:8:4 --op=++*
 ```
 
-Solve a 48 point problem for all combinations of 3 input numbers from range [1, 9], and search for only one suitable expression for each combination.
+Solve a 48-point problem by evaluating every possible combination of three input numbers, where each number is drawn from the range [1, 9], ensuring that only one valid expression is selected per combination.
 ```sh
-24point -p 48 3 -r 1 9
+24point -p max 48 3 -r 1:9
 ```
 
-## Notes
+## License
 
-- C++14 is required for compiling.
+Copyright (C) 2020 Gee Wang\
+Licensed under the [GNU GPL v3](../LICENSE).

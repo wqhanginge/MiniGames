@@ -1,26 +1,21 @@
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
+/*
+ * Copyright (C) 2023, Game of Life by Gee Wang
+ * Licensed under the GNU GPL v3.
+ * C++14 standard is required.
+ */
 
-#include <Windows.h>
-#include <tchar.h>
-#include <random>
+
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 
 #include <fstream>
 #include <sstream>
-
 #include <string>
 #include <vector>
+#include <random>
 
-#ifdef UNICODE
-using tstring = std::wstring;
-using tstring_view = std::wstring_view;
-using tstringstream = std::wstringstream;
-#else
-using tstring = std::string;
-using tstring_view = std::string_view;
-using tstringstream = std::stringstream;
-#endif
+#include <Windows.h>
+#include <tchar.h>
 
 
 #define GETXLPARAM(l)   (MAKEPOINTS(l).x)
@@ -31,7 +26,7 @@ using tstringstream = std::stringstream;
 #define WM_GLSPEED      (WM_APP + 2)    /* wparam is the gears to increase */
 #define WM_GLZOOM       (WM_APP + 3)    /* wparam is the pixels to zoom in, lparam is the mouse position */
 #define WM_GLSETSCROLL  (WM_APP + 4)    /* wparam is a BOOL indicating if redraw */
-#define WM_GLSETTEXT    (WM_APP + 5)    /* wparam is a BOOL indicating if lparam is valid, lparam is the mouse position */
+#define WM_GLSETTEXT    (WM_APP + 5)
 #define WM_GLHELP       (WM_APP + 6)
 
 #define GL_BIRTHCNT     3
@@ -42,25 +37,25 @@ using tstringstream = std::stringstream;
 #define GLM_DEFRATIO    0.25
 
 #define GLWC_CLSNAME    "GAMEOFLIFE"
-#define GLWC_EXDATASIZE sizeof(LONG_PTR)
-#define GLWC_EXDATAOFF  0
+#define GLWC_EXSIZE     sizeof(LONG_PTR)
+#define GLWC_EXOFFSET   0
 
 #define GLRT_SF_PAUSE   0x01
-#define GLRT_SF_INSERT  0x02    /* should be used with GLRT_SF_PAUSE */
-#define GLRT_SF_HELP    0x10
-#define GLRT_SF_UNBOUND 0x20
-#define GLRT_GETSV(s)   ((BYTE)(s) & 0x0F)
-#define GLRT_SETSV(s,v) ((s) = ((BYTE)(s) & 0xF0) | ((BYTE)(v) & 0x0F))
-#define GLRT_SV_RUNNING 0x00
-#define GLRT_SV_PAUSE   (GLRT_SF_PAUSE)
-#define GLRT_SV_INSERT  (GLRT_SF_PAUSE | GLRT_SF_INSERT)
+#define GLRT_SF_INSERT  0x02
+#define GLRT_SF_INFMAP  0x04
+#define GLRT_SF_HELP    0x08
+#define GLRTISFROZEN(s) ((s) & (GLRT_SF_PAUSE | GLRT_SF_INSERT))
 
 #define GLRT_TIMERID    1
 
 #define GLW_MINWNDW     400
 #define GLW_MINWNDH     400
 #define GLW_WNDNAME     "Game of Life"
-#define GLW_SBPAGE      10
+#define GLW_DEFSCALE    5
+#define GLW_MINSCALE    1
+#define GLW_MAXSCALE    10
+#define GLW_SCROLLPAGE  10
+#define GLW_ZOOMDELTA   3
 
 #define GLW_CHAR_ESC    '\x1B'
 #define GLW_CHAR_BS     '\x08'
@@ -74,295 +69,259 @@ using tstringstream = std::stringstream;
 #define GLW_CHAR_NEXT   'n'
 #define GLW_CHAR_HELP   'h'
 
-#define GLW_DEFPIXW     5
-#define GLW_MINPIXW     1
-#define GLW_MAXPIXW     10
-#define GLW_SETPW(pw,w) ((pw) = (BYTE)min(max((int)(w), GLW_MINPIXW), GLW_MAXPIXW))
-#define GLW_ZOOMDELTA   3
-
-#define GLW_DEFCOLMBG   RGB(0, 0, 0)
-#define GLW_DEFCOLCELL  RGB(255, 255, 255)
-#define GLW_DEFCOLEDGE  RGB(255, 255, 0)
-#define GLW_DEFCOLUBEG  RGB(0, 0, 255)
+#define GLW_COLBLANK    RGB(0, 0, 0)
+#define GLW_COLCELL     RGB(255, 255, 255)
+#define GLW_COLBARRIER  RGB(255, 255, 0)
+#define GLW_COLBORDER   RGB(0, 0, 255)
 #define GLW_DEFCOLTBG   RGB(0, 255, 255)
 
-#define GLFT_BITMAP     0
-#define GLFT_COORD      1
-#define GLFT_RECT       2
+#define GLDT_RATIO      0
+#define GLDT_BITMAP     1
+#define GLDT_COORD      2
+#define GLDT_RECT       3
 
-#define __TOSTR(n)      #n
-#define TOSTR(n)        __TOSTR(n)
-#define GLSTR_FTDESC    "\
-File Format:\n\
-   BITMAP\t{" TOSTR(GLFT_BITMAP) " WIDTH HEIGHT PIXELW  0 0 1 0 ... 1 0 1}\n\
-   COORD\t{" TOSTR(GLFT_COORD) " WIDTH HEIGHT PIXELW  x y x y x y ...}\n\
-   RECT\t{" TOSTR(GLFT_RECT) " WIDTH HEIGHT PIXELW  left top right bottom ...}\
-"
-#define GLSTR_CMDHELP   "\
-CmdLine Syntax:\n\
-   <exe> -r WIDTH HEIGHT RATIO [PIXELW]\n\
-   <exe> -h\n\
-   <exe> FILENAME\
-"
 #define GLSTR_WNDHELP   "\
- ESC\tclose \n\
+ ESC\texit \n\
  w\tzoom in \n\
  s\tzoom out \n\
- d\tspeed up \n\
  a\tslow down \n\
- n\tnext step \n\
+ d\tspeed up \n\
  h\thelp \n\
  p\tpause \n\
- e\ttoggle edge \n\
  i\tinsert mode \n\
+ n\tnext step \n\
+ e\ttoggle edge \n\
  BS\tclear map \n\
- MLB\tadd cells \n\
- MRB\tremove cells \
+ LMB\tspawn cell \n\
+ RMB\tkill cell \
 "
 
 #define RETVAL_EXIT     0
 #define RETVAL_CMDFAIL  1
-#define RETVAL_CMDHELP  2
-#define RETVAL_ERRFOPEN 3
-#define RETVAL_BADFTYPE 4
+#define RETVAL_BADARGS  2
+#define RETVAL_ERROPEN  3
+#define RETVAL_BADDATA  4
 
+
+using tstring = std::basic_string<TCHAR>;
+using tstringstream = std::basic_stringstream<TCHAR>;
 
 class Speed {
-    struct Val {
-        int interval;
-        int rps;
-        LPCTSTR desc;
-        constexpr bool operator==(const Val& other) const { return (this == &other); }
-        constexpr bool operator!=(const Val& other) const { return (this != &other); }
-    };
+    static const int _count = 8;
+    static const struct _Val { int interval; int rps; LPCTSTR description; } _vlist[_count];
 
 public:
-    static constexpr Val MANUAL = { -1, 0, TEXT("Manual") };
-    static constexpr Val EXSLOW = { 1000, 1, TEXT("Extremly Slow") };
-    static constexpr Val VERYSLOW = { 500, 2, TEXT("Very Slow") };
-    static constexpr Val SLOW = { 250, 4, TEXT("Slow") };
-    static constexpr Val NORMAL = { 100, 10, TEXT("Normal") };
-    static constexpr Val FAST = { 50, 20, TEXT("Fast") };
-    static constexpr Val VERYFAST = { 25, 40, TEXT("Very Fast") };
-    static constexpr Val EXFAST = { 10, 100, TEXT("Extremly Fast") };
+    enum Option :int { MANUAL, EXSLOW, VSLOW, SLOW, NORMAL, FAST, VFAST, EXFAST };
 
-    Speed() :_pos(4) {}     //NORMAL
-    Speed(const Val& v) { _assign(v); }
+    Speed() :_opt(NORMAL) {}
+    Speed(const Option opt) { _assign(opt); }
 
-    const Val& operator*() const { return *_val_list[_pos]; }
-    Speed& operator=(const Val& v) { _assign(v); return *this; }
+    friend bool operator==(const Speed& lhs, const Speed& rhs) { return lhs._opt == rhs._opt; }
+    friend bool operator!=(const Speed& lhs, const Speed& rhs) { return lhs._opt != rhs._opt; }
+
+    Speed& operator=(const Option opt) { _assign(opt); return *this; }
 
     Speed& operator+=(int n) { _add(n); return *this; }
     Speed& operator++() { return *this += 1; }
-    Speed operator+(int n) const { return Speed(*this) += n; }
     const Speed operator++(int) { Speed tmp = *this; ++*this; return tmp; }
+    Speed operator+(int n) const { return Speed(*this) += n; }
 
     Speed& operator-=(int n) { return *this += (-n); }
     Speed& operator--() { return *this -= 1; }
-    Speed operator-(int n) const { return *this + (-n); }
     const Speed operator--(int) { Speed tmp = *this; --*this; return tmp; }
+    Speed operator-(int n) const { return *this + (-n); }
+
+    int interval() const { return _vlist[_opt].interval; }
+    int rps() const { return _vlist[_opt].rps; }
+    LPCTSTR description() const { return _vlist[_opt].description; }
 
 private:
-    static constexpr int _count = 8;
-    static constexpr const Val* _val_list[_count] = {
-        &MANUAL, &EXSLOW, &VERYSLOW, &SLOW, &NORMAL, &FAST, &VERYFAST, &EXFAST
-    };
-    short _pos;
+    Option _opt;
 
-    void _assign(const Val& v) {
-        short i = 0;
-        for (; i < _count; i++) if (v == *_val_list[i]) _pos = i;
-        if (i >= _count) throw std::invalid_argument("bad value");
-    }
-    inline void _add(int n) { _pos = (_pos + n % _count + _count) % _count; };
+    inline void _assign(const Option opt) { _opt = Option((opt % _count + _count) % _count); }
+    inline void _add(int n) { _opt = Option((_opt + n % _count + _count) % _count); }
 };
 
-class GameOfLifeInfo {
+const Speed::_Val Speed::_vlist[Speed::_count] = {
+    { -1, 0, TEXT("Manual") },
+    { 1000, 1, TEXT("Extremly Slow") },
+    { 500, 2, TEXT("Very Slow") },
+    { 250, 4, TEXT("Slow") },
+    { 100, 10, TEXT("Normal") },
+    { 50, 20, TEXT("Fast") },
+    { 25, 40, TEXT("Very Fast") },
+    { 10, 100, TEXT("Extremly Fast") },
+};
+
+class GLMap {
 public:
     LPCTSTR name = TEXT(GLW_WNDNAME);
-    COLORREF color_bg = GLW_DEFCOLMBG;
-    COLORREF color_cell = GLW_DEFCOLCELL;
-    COLORREF color_edge = GLW_DEFCOLEDGE;
-    COLORREF color_ubeg = GLW_DEFCOLUBEG;
-    Speed speed;
-    BYTE state = GLRT_SF_PAUSE | GLRT_SF_HELP;
-    BYTE pixelw = GLW_DEFPIXW;
 
-    GameOfLifeInfo(WORD w, WORD h, double ratio, BYTE pw = GLW_DEFPIXW);
-    GameOfLifeInfo(WORD w, WORD h, const bool* map, BYTE pw = GLW_DEFPIXW);
-    GameOfLifeInfo(WORD w, WORD h, const std::vector<POINT>& coords, BYTE pw = GLW_DEFPIXW);
-    GameOfLifeInfo(WORD w, WORD h, const std::vector<RECT>& rects, BYTE pw = GLW_DEFPIXW);
-    GameOfLifeInfo(const GameOfLifeInfo&) = delete;
-    GameOfLifeInfo(GameOfLifeInfo&&) = delete;
-    ~GameOfLifeInfo() { delete[] _curr_map; delete[] _last_map; }
+    GLMap(size_t width, size_t height) :_width(width), _height(height), _gen(0) { _alloc(); }
+    GLMap(const GLMap&) = delete;
+    GLMap(GLMap&&) = delete;
+    ~GLMap() { _free(); }
 
-    WORD mapw() const { return _width; }
-    WORD maph() const { return _height; }
-    WORD fullw() const { return _width + 2; }
-    WORD fullh() const { return _height + 2; }
-    size_t gen() const { return _generation; }
-    bool isinmap(int x, int y) const;
-    void update(bool ub);
-    void draw(HDC hdc, int left, int top, PRECT prgn, bool ub);
-    void set(int x, int y, bool alive);
-    void clear();
+    bool* operator[](size_t row) { return _mfront + row * _width; }
+
+    size_t width() const { return _width; }
+    size_t height() const { return _height; }
+    size_t gen() const { return _gen; }
+    bool valid(size_t x, size_t y) const { return (x < _width && y < _height); }
+
+    void init();
+    void init(float ratio, unsigned seed = std::minstd_rand::default_seed);
+    void init(const bool map[], size_t size);
+    void init(const POINT coord[], size_t size);
+    void init(const RECT rect[], size_t size);
+    void next(bool boundless = false);
 
 private:
-    WORD _width;
-    WORD _height;
-    size_t _generation;
-    bool* _curr_map;
-    bool* _last_map;
+    size_t _width, _height, _gen;
+    bool* _mfront, * _mback;
+
+    void _alloc() { _mfront = new bool[_width * _height]; _mback = new bool[_width * _height]; }
+    void _free() { delete[] _mfront; delete[] _mback; }
+    size_t _offset(size_t x, size_t y) const { return (x + _width) % _width + (y + _height) % _height * _width; }
 };
 
-GameOfLifeInfo::GameOfLifeInfo(WORD w, WORD h, double ratio, BYTE pw /*GLW_DEFPIXW*/)
-    :pixelw(pw + !pw), _width(w + !w), _height(h + !h), _generation(0) {
-    size_t size = (size_t)_width * _height, cells;
-    _curr_map = new bool[size] {};
-    _last_map = new bool[size] {};
-    ratio = abs(ratio);
-    cells = (ratio > 1) ? (size_t)ratio : (size_t)(size * ratio);
-    cells = min(max(0, cells), size);
-    memset(_curr_map, 1, sizeof(bool) * cells);
-    if (cells > 0 && cells < size) {    //shuffle
-        std::random_device rd;
-        std::minstd_rand urand(rd());
-        for (size_t i = 0; i < size; i++) {
-            size_t k = urand() % (size - i) + i;
-            std::swap(_curr_map[i], _curr_map[k]);
+void GLMap::init() {
+    _gen = 0;
+    memset(_mfront, 0, sizeof(bool) * _width * _height);
+}
+
+void GLMap::init(float ratio, unsigned seed /*std::minstd_rand::default_seed*/) {
+    size_t msize = _width * _height;
+    size_t csize = std::min(size_t(msize * std::abs(ratio)), msize);
+    init();
+    memset(_mfront, 1, sizeof(bool) * csize);
+    if (csize > 0 && csize < msize) {
+        std::minstd_rand urand(seed);
+        for (size_t i = 0; i < msize; i++) {    //shuffle
+            size_t k = urand() % (msize - i) + i;
+            std::swap(_mfront[i], _mfront[k]);
         }
     }
 }
 
-GameOfLifeInfo::GameOfLifeInfo(WORD w, WORD h, const bool* map, BYTE pw /*GLW_DEFPIXW*/)
-    :pixelw(pw + !pw), _width(w + !w), _height(h + !h), _generation(0) {
-    size_t size = (size_t)_width * _height;
-    _curr_map = new bool[size] {};
-    _last_map = new bool[size] {};
-    memcpy(_curr_map, map, sizeof(bool) * size);
+void GLMap::init(const bool map[], size_t size) {
+    init();
+    memcpy(_mfront, map, sizeof(bool) * std::min(size, _width * _height));
 }
 
-GameOfLifeInfo::GameOfLifeInfo(WORD w, WORD h, const std::vector<POINT>& coords, BYTE pw /*GLW_DEFPIXW*/)
-    :pixelw(pw + !pw), _width(w + !w), _height(h + !h), _generation(0) {
-    size_t size = (size_t)_width * _height;
-    _curr_map = new bool[size] {};
-    _last_map = new bool[size] {};
-    for (auto& pt : coords) {
-        if (isinmap(pt.x, pt.y))
-            _curr_map[pt.x + pt.y * _width] = true;
+void GLMap::init(const POINT coord[], size_t size) {
+    init();
+    for (size_t i = 0; i < size; i++) {
+        auto& pt = coord[i];
+        if (valid(pt.x, pt.y)) _mfront[pt.x + pt.y * _width] = true;
     }
 }
 
-GameOfLifeInfo::GameOfLifeInfo(WORD w, WORD h, const std::vector<RECT>& rects, BYTE pw /*GLW_DEFPIXW*/)
-    :pixelw(pw + !pw), _width(w + !w), _height(h + !h), _generation(0) {
-    size_t size = (size_t)_width * _height;
-    _curr_map = new bool[size] {};
-    _last_map = new bool[size] {};
-    for (auto rect : rects) {
-        if (rect.left > rect.right) std::swap(rect.left, rect.right);
-        if (rect.top > rect.bottom) std::swap(rect.top, rect.bottom);
-        for (int x = rect.left; x < rect.right; x++) {
-            for (int y = rect.top; y < rect.bottom; y++) {
-                if (isinmap(x, y))
-                    _curr_map[x + y * _width] = true;
-            }
+void GLMap::init(const RECT rect[], size_t size) {
+    init();
+    for (size_t i = 0; i < size; i++) {
+        RECT reg = { 0, 0, (LONG)_width, (LONG)_height };
+        IntersectRect(&reg, &reg, &rect[i]);
+        for (LONG row = reg.top; row < reg.bottom; row++) {
+            memset(&_mfront[row * _width + reg.left], 1, sizeof(bool) * (reg.right - reg.left));
         }
     }
 }
 
-bool GameOfLifeInfo::isinmap(int x, int y) const {
-    return (x >= 0 && x < _width && y >= 0 && y < _height);
-}
+void GLMap::next(bool boundless /*flase*/) {
+    for (size_t i = 0; i < _width * _height; i++) {
+        size_t x = i % _width, y = i / _width, cnt = 0;
 
-void GameOfLifeInfo::update(bool ub) {
-    _generation++;
-    std::swap(_curr_map, _last_map);
-    for (int i = 0; i < _width * _height; i++) {
-        int x = i % _width, y = i / _width;
-        int xl = (x - 1 + _width) % _width, xr = (x + 1) % _width;
-        int yl = (y - 1 + _height) % _height, yr = (y + 1) % _height;
-        bool left = (x - 1 >= 0), right = (x + 1 < _width);
-        bool up = (y - 1 >= 0), down = (y + 1 < _width);
-        int neicnt = 0;
+        cnt += (boundless || valid(x - 1, y - 1)) && _mfront[_offset(x - 1, y - 1)];
+        cnt += (boundless || valid(x, y - 1)) && _mfront[_offset(x, y - 1)];
+        cnt += (boundless || valid(x + 1, y - 1)) && _mfront[_offset(x + 1, y - 1)];
+        cnt += (boundless || valid(x - 1, y)) && _mfront[_offset(x - 1, y)];
+        cnt += (boundless || valid(x + 1, y)) && _mfront[_offset(x + 1, y)];
+        cnt += (boundless || valid(x - 1, y + 1)) && _mfront[_offset(x - 1, y + 1)];
+        cnt += (boundless || valid(x, y + 1)) && _mfront[_offset(x, y + 1)];
+        cnt += (boundless || valid(x + 1, y + 1)) && _mfront[_offset(x + 1, y + 1)];
 
-        neicnt += ((ub || up && left) && _last_map[xl + yl * _width]);
-        neicnt += ((ub || up) && _last_map[x + yl * _width]);
-        neicnt += ((ub || up && right) && _last_map[xr + yl * _width]);
-        neicnt += ((ub || left) && _last_map[xl + y * _width]);
-        neicnt += ((ub || right) && _last_map[xr + y * _width]);
-        neicnt += ((ub || down && left) && _last_map[xl + yr * _width]);
-        neicnt += ((ub || down) && _last_map[x + yr * _width]);
-        neicnt += ((ub || down && right) && _last_map[xr + yr * _width]);
-
-        _curr_map[i] = (neicnt == GL_BIRTHCNT) + (neicnt == GL_ALIVECNT) * _last_map[i];
+        _mback[i] = (cnt == GL_BIRTHCNT) + (cnt == GL_ALIVECNT) * _mfront[i];
     }
+    std::swap(_mfront, _mback);
+    _gen++;
 }
 
-void GameOfLifeInfo::draw(HDC hdc, int left, int top, PRECT prgn, bool ub) {
-    HBRUSH hbr = (HBRUSH)GetStockObject(DC_BRUSH);
-    COLORREF ceg = (ub) ? color_ubeg : color_edge;
+struct GLRuntime {
+    GLMap* map = nullptr;
+    BYTE scale = GLW_DEFSCALE;
+    BYTE state = GLRT_SF_PAUSE | GLRT_SF_HELP;
+    Speed speed = Speed::NORMAL;
+    POINT target = { -1 , -1 };
+    COLORREF col_blank = GLW_COLBLANK;
+    COLORREF col_cell = GLW_COLCELL;
+    COLORREF col_barrier = GLW_COLBARRIER;
+    COLORREF col_border = GLW_COLBORDER;
 
-    SetDCBrushColor(hdc, ceg);
-    RECT erect = { left, top, left + (_width + 2) * pixelw, top + (_height + 2) * pixelw };
-    FillRect(hdc, &erect, hbr);
-    SetDCBrushColor(hdc, color_bg);
-    RECT brect = { left + pixelw, top + pixelw, left + (_width + 1) * pixelw, top + (_height + 1) * pixelw };
-    FillRect(hdc, &brect, hbr);
+    LONG width() const { return (map) ? ((LONG)map->width() + 2) * scale : 0; }
+    LONG height() const { return (map) ? ((LONG)map->height() + 2) * scale : 0; }
+    LONG mapoff(LONG wndpos, LONG offset) const { return (wndpos - offset) / scale - 1; }
+    LONG wndpos(LONG mapoff, LONG offset) const { return (mapoff + 1) * scale + offset; }
 
-    SetDCBrushColor(hdc, color_cell);
-    for (int i = 0; i < _width * _height; i++) {
-        if (_curr_map[i]) {
-            int cleft = left + (1 + i % _width) * pixelw;
-            int ctop = top + (1 + i / _width) * pixelw;
-            RECT crect = { cleft, ctop, cleft + pixelw, ctop + pixelw };
-            if (crect.left < prgn->right && crect.right > prgn->left && crect.top < prgn->bottom && crect.bottom > prgn->top)
-                FillRect(hdc, &crect, hbr);
-        }
-    }
-}
+    POINT offset(HWND hwnd) const;
+    void draw(HDC hdc, RECT region, POINT offset) const;
+};
 
-void GameOfLifeInfo::set(int x, int y, bool alive) {
-    if (isinmap(x, y)) _curr_map[x + y * _width] = alive;
-}
+POINT GLRuntime::offset(HWND hwnd) const {
+    POINT pt = {};
 
-void GameOfLifeInfo::clear() {
-    memset(_curr_map, 0, sizeof(bool) * _width * _height);
-    _generation = 0;
-}
-
-
-void getMapOriginPoint(HWND hwnd, PPOINT pori) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
     RECT crect;
     GetClientRect(hwnd, &crect);
-    pori->x = max(0, crect.right - pgl->fullw() * pgl->pixelw) / 2;
-    pori->y = max(0, crect.bottom - pgl->fullh() * pgl->pixelw) / 2;
+    pt.x = std::max(0L, crect.right - width()) / 2;
+    pt.y = std::max(0L, crect.bottom - height()) / 2;
+
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
     sci.fMask = SIF_POS;
     GetScrollInfo(hwnd, SB_HORZ, &sci);
-    pori->x -= sci.nPos;
+    pt.x -= sci.nPos;
     GetScrollInfo(hwnd, SB_VERT, &sci);
-    pori->y -= sci.nPos;
+    pt.y -= sci.nPos;
+
+    return pt;
 }
 
-void adjustMousePos(HWND hwnd, PPOINT pmouse) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    POINT ori;
-    getMapOriginPoint(hwnd, &ori);
-    pmouse->x = (pmouse->x - ori.x) / pgl->pixelw - 1;
-    pmouse->y = (pmouse->y - ori.y) / pgl->pixelw - 1;
+void GLRuntime::draw(HDC hdc, RECT region, POINT offset) const {
+    HBRUSH hbr = (HBRUSH)GetStockObject(DC_BRUSH);
+    COLORREF col_edge = (state & GLRT_SF_INFMAP) ? col_border : col_barrier;
+
+    RECT visual, content = { 0, 0, width(), height() };
+    OffsetRect(&content, offset.x, offset.y);
+
+    IntersectRect(&visual, &content, &region);
+    SetDCBrushColor(hdc, col_edge);
+    FillRect(hdc, &visual, hbr);
+
+    InflateRect(&content, -scale, -scale);
+    IntersectRect(&visual, &content, &region);
+    SetDCBrushColor(hdc, col_blank);
+    FillRect(hdc, &visual, hbr);
+
+    SetDCBrushColor(hdc, col_cell);
+    for (size_t i = 0; map && i < map->width() * map->height(); i++) {
+        LONG x = LONG(i % map->width()), y = LONG(i / map->width());
+        RECT cell = { 0, 0, scale, scale };
+        OffsetRect(&cell, wndpos(x, offset.x), wndpos(y, offset.y));
+        if ((*map)[y][x] && IntersectRect(&visual, &cell, &region)) {
+            FillRect(hdc, &visual, hbr);
+        }
+    }
 }
 
 
 LRESULT onCreate(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     LPCREATESTRUCT lpcs = (LPCREATESTRUCT)lparam;
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)lpcs->lpCreateParams;
-    SetWindowLongPtr(hwnd, GLWC_EXDATAOFF, (LONG_PTR)pgl);
+    GLRuntime* pgl = (GLRuntime*)lpcs->lpCreateParams;
+    SetWindowLongPtr(hwnd, GLWC_EXOFFSET, (LONG_PTR)pgl);
 
-    RECT crect = { 0, 0, pgl->fullw() * pgl->pixelw, pgl->fullh() * pgl->pixelw };
+    RECT crect = { 0, 0, pgl->width(), pgl->height() };
     AdjustWindowRect(&crect, lpcs->style, FALSE);
-    int wndw = max(GLW_MINWNDW, crect.right - crect.left);
-    int wndh = max(GLW_MINWNDH, crect.bottom - crect.top);
+    int wndw = std::max<int>(GLW_MINWNDW, crect.right - crect.left);
+    int wndh = std::max<int>(GLW_MINWNDH, crect.bottom - crect.top);
     MoveWindow(hwnd, lpcs->x, lpcs->y, wndw, wndh, FALSE);
 
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
@@ -370,10 +329,10 @@ LRESULT onCreate(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     SetScrollInfo(hwnd, SB_HORZ, &sci, FALSE);
     SetScrollInfo(hwnd, SB_VERT, &sci, FALSE);
 
-    if (GLRT_GETSV(pgl->state) == GLRT_SV_RUNNING && *pgl->speed != Speed::MANUAL)
-        SetTimer(hwnd, GLRT_TIMERID, (*pgl->speed).interval, nullptr);
+    if (!GLRTISFROZEN(pgl->state) && pgl->speed != Speed::MANUAL)
+        SetTimer(hwnd, GLRT_TIMERID, pgl->speed.interval(), nullptr);
 
-    PostMessage(hwnd, WM_GLSETTEXT, FALSE, 0);
+    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     return 0;
 }
 
@@ -384,72 +343,67 @@ LRESULT onDestroy(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onGLPause(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    if (pgl->state & GLRT_SF_PAUSE) {   //if pause, resume
-        GLRT_SETSV(pgl->state, GLRT_SV_RUNNING);
-        if (*pgl->speed != Speed::MANUAL)
-            SetTimer(hwnd, GLRT_TIMERID, (*pgl->speed).interval, nullptr);
-    }
-    else {  //if running, puase
-        GLRT_SETSV(pgl->state, GLRT_SV_PAUSE);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+    if (GLRTISFROZEN(pgl->state)) { //resume
+        pgl->state &= ~(GLRT_SF_PAUSE | GLRT_SF_INSERT);
+        if (pgl->speed != Speed::MANUAL)
+            SetTimer(hwnd, GLRT_TIMERID, pgl->speed.interval(), nullptr);
+    } else {    //pause
+        pgl->state |= GLRT_SF_PAUSE;
         KillTimer(hwnd, GLRT_TIMERID);
     }
-    PostMessage(hwnd, WM_GLSETTEXT, FALSE, 0);
+    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     return 0;
 }
 
 LRESULT onGLInsert(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    if (pgl->state & GLRT_SF_INSERT) {  //exit insert mode but remain pause mode
-        GLRT_SETSV(pgl->state, GLRT_SV_PAUSE);
-    }
-    else {  //enter insert mode
-        GLRT_SETSV(pgl->state, GLRT_SV_INSERT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+    pgl->state ^= GLRT_SF_INSERT;
+    if (pgl->state & GLRT_SF_INSERT) {  //enter insert mode
         KillTimer(hwnd, GLRT_TIMERID);
+    } else {    //exit insert mode and keep pause
+        pgl->state |= GLRT_SF_PAUSE;
     }
-    PostMessage(hwnd, WM_GLSETTEXT, FALSE, 0);
+    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     return 0;
 }
 
 LRESULT onGLSpeed(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     pgl->speed += (int)wparam;
-    if (*pgl->speed == Speed::MANUAL) {
+    if (pgl->speed == Speed::MANUAL) {
         KillTimer(hwnd, GLRT_TIMERID);
+    } else if (!GLRTISFROZEN(pgl->state)) {
+        SetTimer(hwnd, GLRT_TIMERID, pgl->speed.interval(), nullptr);
     }
-    else if (GLRT_GETSV(pgl->state) == GLRT_SV_RUNNING) {
-        SetTimer(hwnd, GLRT_TIMERID, (*pgl->speed).interval, nullptr);
-    }
-    PostMessage(hwnd, WM_GLSETTEXT, FALSE, 0);
+    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     return 0;
 }
 
 LRESULT onGLZoom(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
 
-    //store old values
-    BYTE oldpw = pgl->pixelw;
-    POINT ori, npos;
-    getMapOriginPoint(hwnd, &ori);
-
+    //get current scroll position
+    POINT npos, origin = pgl->offset(hwnd);
     sci.fMask = SIF_POS;
     GetScrollInfo(hwnd, SB_HORZ, &sci);
-    npos.x = sci.nPos - max(ori.x, 0);
+    npos.x = sci.nPos - std::max(origin.x, 0L);
     GetScrollInfo(hwnd, SB_VERT, &sci);
-    npos.y = sci.nPos - max(ori.y, 0);
+    npos.y = sci.nPos - std::max(origin.y, 0L);
 
     //zoom and update scroll bar
-    GLW_SETPW(pgl->pixelw, pgl->pixelw + (int)wparam);
+    BYTE scale = std::min(std::max(pgl->scale + (int)wparam, GLW_MINSCALE), GLW_MAXSCALE);
+    std::swap(pgl->scale, scale);
     SendMessage(hwnd, WM_GLSETSCROLL, FALSE, 0);
 
     //update scroll position
     POINTS mpos = MAKEPOINTS(lparam);
     sci.fMask = SIF_RANGE;  //PAGE is alternative, see onGLSetScroll()
     GetScrollInfo(hwnd, SB_HORZ, &sci); //NOTE: Get before any Set, otherwise it may get wrong data
-    npos.x = ((npos.x + mpos.x) * pgl->pixelw / oldpw - mpos.x) * (bool)sci.nMax;
+    npos.x = ((npos.x + mpos.x) * pgl->scale / scale - mpos.x) * (bool)sci.nMax;
     GetScrollInfo(hwnd, SB_VERT, &sci);
-    npos.y = ((npos.y + mpos.y) * pgl->pixelw / oldpw - mpos.y) * (bool)sci.nMax;
+    npos.y = ((npos.y + mpos.y) * pgl->scale / scale - mpos.y) * (bool)sci.nMax;
 
     sci.fMask = SIF_POS;
     sci.nPos = npos.x;
@@ -463,58 +417,55 @@ LRESULT onGLZoom(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onGLSetScroll(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     WINDOWINFO wndi = { sizeof(WINDOWINFO) };
     GetWindowInfo(hwnd, &wndi);
-    int mw = pgl->fullw() * pgl->pixelw, mh = pgl->fullh() * pgl->pixelw;
+    int vw = pgl->width(), vh = pgl->height();
     int cw = wndi.rcWindow.right - wndi.rcWindow.left - wndi.cxWindowBorders * 2;
     int ch = wndi.rcWindow.bottom - wndi.rcWindow.top - wndi.cyWindowBorders * 2 - GetSystemMetrics(SM_CYCAPTION);
-    bool hscroll = (mw > cw), vscroll = (mh > ch);
-    hscroll |= (vscroll && mw > (cw - GetSystemMetrics(SM_CXVSCROLL)));
-    vscroll |= (hscroll && mh > (ch - GetSystemMetrics(SM_CYHSCROLL)));
-    hscroll |= (vscroll && mw > (cw - GetSystemMetrics(SM_CXVSCROLL))); //reevaluate after changing
+    bool hscroll = (vw > cw), vscroll = (vh > ch);
+    hscroll |= (vscroll && vw > (cw - GetSystemMetrics(SM_CXVSCROLL)));
+    vscroll |= (hscroll && vh > (ch - GetSystemMetrics(SM_CYHSCROLL)));
+    hscroll |= (vscroll && vw > (cw - GetSystemMetrics(SM_CXVSCROLL))); //reevaluate after changing
 
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
     sci.fMask = SIF_RANGE | SIF_PAGE;   //MaxScrollPos = MaxRangeValue - (PageSize - 1)
-    sci.nMax = hscroll * mw;
+    sci.nMax = hscroll * vw;
     sci.nPage = hscroll * (cw - vscroll * GetSystemMetrics(SM_CXVSCROLL) + 1);
     SetScrollInfo(hwnd, SB_HORZ, &sci, (BOOL)wparam);
-    sci.nMax = vscroll * mh;
+    sci.nMax = vscroll * vh;
     sci.nPage = vscroll * (ch - hscroll * GetSystemMetrics(SM_CYHSCROLL) + 1);
     SetScrollInfo(hwnd, SB_VERT, &sci, (BOOL)wparam);
     return 0;
 }
 
 LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    static LPARAM slparam = 0;
-    if (wparam) slparam = lparam;
-
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     tstringstream text;
-    text << pgl->name << TEXT(":");
 
-    switch (GLRT_GETSV(pgl->state)) {
-    case GLRT_SV_PAUSE: text << TEXT("  Pause"); break;
-    case GLRT_SV_INSERT: text << TEXT("  Insert"); break;
+    text << pgl->map->name << TEXT(':') << TEXT("  ");
+    text << pgl->map->gen() << TEXT("  ");
+
+    if (pgl->state & GLRT_SF_INSERT) {
+        text << TEXT("Insert") << TEXT("  ");
+    } else if (pgl->state & GLRT_SF_PAUSE) {
+        text << TEXT("Pause") << TEXT("  ");
     }
 
-    text << TEXT("  ") << pgl->gen();
+    text << pgl->speed.description();
+    if (pgl->speed != Speed::MANUAL)
+        text << TEXT('[') << pgl->speed.rps() << TEXT(" RPS") << TEXT(']');
+    text << TEXT("  ");
 
-    text << TEXT("  ") << (*pgl->speed).desc;
-    if (*pgl->speed != Speed::MANUAL)
-        text << TEXT("[") << (*pgl->speed).rps << TEXT(" RPS]");
-
-    POINT mpos = { GETXLPARAM(slparam), GETYLPARAM(slparam) };
-    adjustMousePos(hwnd, &mpos);
-    if (pgl->isinmap(mpos.x, mpos.y))
-        text << TEXT("  (") << mpos.x << TEXT(",") << mpos.y << TEXT(")");
+    if (pgl->map->valid(pgl->target.x, pgl->target.y))
+        text << TEXT('(') << pgl->target.x << TEXT(',') << pgl->target.y << TEXT(')');
 
     SetWindowText(hwnd, text.str().c_str());
     return 0;
 }
 
 LRESULT onGLHelp(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     HDC hdc = GetDC(hwnd);
     RECT uprect = {};
     pgl->state ^= GLRT_SF_HELP;
@@ -525,7 +476,7 @@ LRESULT onGLHelp(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     switch (wparam) {
     case TEXT(GLW_CHAR_ESC):    //exit game
         DestroyWindow(hwnd);
@@ -537,9 +488,9 @@ LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         PostMessage(hwnd, WM_GLINSERT, 0, 0);
         break;
     case TEXT(GLW_CHAR_BS):     //clear the whole map
-        if (GLRT_GETSV(pgl->state) == GLRT_SV_INSERT) {
-            pgl->clear();
-            PostMessage(hwnd, WM_GLSETTEXT, FALSE, 0);
+        if (pgl->state & GLRT_SF_INSERT) {
+            pgl->map->init();
+            PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
             InvalidateRect(hwnd, nullptr, FALSE);
         }
         break;
@@ -556,16 +507,16 @@ LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         PostMessage(hwnd, WM_GLSPEED, -1, 0);
         break;
     case TEXT(GLW_CHAR_NEXT):   //next round when manual
-        if (GLRT_GETSV(pgl->state) == GLRT_SV_RUNNING && *pgl->speed == Speed::MANUAL) {
-            SendMessage(hwnd, WM_TIMER, GLRT_TIMERID, NULL);
+        if (!GLRTISFROZEN(pgl->state) && pgl->speed == Speed::MANUAL) {
+            SendMessage(hwnd, WM_TIMER, GLRT_TIMERID, (LPARAM)NULL);
         }
         break;
     case TEXT(GLW_CHAR_HELP):   //show or hide help information
         PostMessage(hwnd, WM_GLHELP, 0, 0);
         break;
-    case TEXT(GLW_CHAR_EDGE):   //change boundary type
-        if (pgl->state & GLRT_SF_PAUSE) {
-            pgl->state ^= GLRT_SF_UNBOUND;
+    case TEXT(GLW_CHAR_EDGE):   //change map type
+        if (GLRTISFROZEN(pgl->state)) {
+            pgl->state ^= GLRT_SF_INFMAP;
             InvalidateRect(hwnd, nullptr, FALSE);
         }
         break;
@@ -573,14 +524,15 @@ LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     return 0;
 }
 
-LRESULT onLRButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam, bool left) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    if (GLRT_GETSV(pgl->state) == GLRT_SV_INSERT) {
-        POINT pos = { GETXLPARAM(lparam), GETYLPARAM(lparam) };
-        RECT uprect = { pos.x - pgl->pixelw, pos.y - pgl->pixelw, pos.x + pgl->pixelw, pos.y + pgl->pixelw };
-        adjustMousePos(hwnd, &pos);
-        if (pgl->isinmap(pos.x, pos.y)) {
-            pgl->set(pos.x, pos.y, left);
+LRESULT onLRButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam, bool lbutton) {
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+    if (pgl->state & GLRT_SF_INSERT) {
+        POINT origin = pgl->offset(hwnd);
+        pgl->target = { pgl->mapoff(GETXLPARAM(lparam), origin.x), pgl->mapoff(GETYLPARAM(lparam), origin.y) };
+        if (pgl->map->valid(pgl->target.x, pgl->target.y)) {
+            RECT uprect = { 0, 0, pgl->scale, pgl->scale };
+            (*pgl->map)[pgl->target.y][pgl->target.x] = lbutton;
+            OffsetRect(&uprect, pgl->wndpos(pgl->target.x, origin.x), pgl->wndpos(pgl->target.y, origin.y));
             InvalidateRect(hwnd, &uprect, FALSE);
         }
     }
@@ -588,23 +540,24 @@ LRESULT onLRButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam, bool left) {
 }
 
 LRESULT onMouseMove(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    POINT pos = { GETXLPARAM(lparam), GETYLPARAM(lparam) };
-    RECT uprect = { pos.x - pgl->pixelw, pos.y - pgl->pixelw, pos.x + pgl->pixelw, pos.y + pgl->pixelw };
-    adjustMousePos(hwnd, &pos);
-    if (GLRT_GETSV(pgl->state) == GLRT_SV_INSERT && (wparam == MK_LBUTTON || wparam == MK_RBUTTON)) {
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+    POINT origin = pgl->offset(hwnd);
+    pgl->target = { pgl->mapoff(GETXLPARAM(lparam), origin.x), pgl->mapoff(GETYLPARAM(lparam), origin.y) };
+    if ((pgl->state & GLRT_SF_INSERT) && (wparam == MK_LBUTTON || wparam == MK_RBUTTON)) {
         bool alive = wparam & MK_LBUTTON;
-        if (pgl->isinmap(pos.x, pos.y)) {
-            pgl->set(pos.x, pos.y, alive);
+        if (pgl->map->valid(pgl->target.x, pgl->target.y)) {
+            RECT uprect = { 0, 0, pgl->scale, pgl->scale };
+            (*pgl->map)[pgl->target.y][pgl->target.x] = alive;
+            OffsetRect(&uprect, pgl->wndpos(pgl->target.x, origin.x), pgl->wndpos(pgl->target.y, origin.y));
             InvalidateRect(hwnd, &uprect, FALSE);
         }
     }
-    SendMessage(hwnd, WM_GLSETTEXT, TRUE, lparam);
+    SendMessage(hwnd, WM_GLSETTEXT, 0, 0);
     return 0;
 }
 
 LRESULT onScroll(HWND hwnd, WPARAM wparam, LPARAM lparam, bool hscroll) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
     int nbar = (hscroll) ? SB_HORZ : SB_VERT;
     sci.fMask = SIF_ALL;
@@ -613,10 +566,10 @@ LRESULT onScroll(HWND hwnd, WPARAM wparam, LPARAM lparam, bool hscroll) {
     switch (LOWORD(wparam)) {   //NOTE: the msg for HSCROLL and VSCROLL are symmetric
     case SB_LEFT: sci.nPos = sci.nMin; break;
     case SB_RIGHT: sci.nPos = sci.nMax; break;
-    case SB_LINELEFT: sci.nPos -= pgl->pixelw; break;
-    case SB_LINERIGHT: sci.nPos += pgl->pixelw; break;
-    case SB_PAGELEFT: sci.nPos -= pgl->pixelw * GLW_SBPAGE; break;
-    case SB_PAGERIGHT: sci.nPos += pgl->pixelw * GLW_SBPAGE; break;
+    case SB_LINELEFT: sci.nPos -= pgl->scale; break;
+    case SB_LINERIGHT: sci.nPos += pgl->scale; break;
+    case SB_PAGELEFT: sci.nPos -= pgl->scale * GLW_SCROLLPAGE; break;
+    case SB_PAGERIGHT: sci.nPos += pgl->scale * GLW_SCROLLPAGE; break;
     case SB_THUMBTRACK: sci.nPos = sci.nTrackPos; break;
     }
 
@@ -627,31 +580,35 @@ LRESULT onScroll(HWND hwnd, WPARAM wparam, LPARAM lparam, bool hscroll) {
 }
 
 LRESULT onMouseWheel(HWND hwnd, WPARAM wparam, LPARAM lparam) {
+    POINT pt = { GETXLPARAM(lparam), GETYLPARAM(lparam) };
+    ScreenToClient(hwnd, &pt);
+
     if (GET_KEYSTATE_WPARAM(wparam) & MK_CONTROL) { //zoom
         int pws_to_zoom_in = GLW_ZOOMDELTA * GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
-        POINT pt = { GETXLPARAM(lparam), GETYLPARAM(lparam) };
-        ScreenToClient(hwnd, &pt);
         SendMessage(hwnd, WM_GLZOOM, pws_to_zoom_in, MAKELPARAM(pt.x, pt.y));
-        return 0;
+    } else {    //scroll
+        GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+        SCROLLINFO sci = { sizeof(SCROLLINFO) };
+        UINT wheel_lines;
+        SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &wheel_lines, 0);
+        int nbar = (GET_KEYSTATE_WPARAM(wparam) & MK_SHIFT) ? SB_HORZ : SB_VERT;
+        int cells_to_wheel = (WORD)wheel_lines * GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
+
+        sci.fMask = SIF_POS;
+        GetScrollInfo(hwnd, nbar, &sci);
+        sci.nPos -= cells_to_wheel * pgl->scale;
+        SetScrollInfo(hwnd, nbar, &sci, TRUE);
+        InvalidateRect(hwnd, nullptr, FALSE);
+
+        POINT origin = pgl->offset(hwnd);
+        pgl->target = { pgl->mapoff(pt.x, origin.x), pgl->mapoff(pt.y, origin.y) };
+        PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     }
-
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    SCROLLINFO sci = { sizeof(SCROLLINFO) };
-    UINT wheel_lines;
-    SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &wheel_lines, 0);
-    int nbar = (GET_KEYSTATE_WPARAM(wparam) & MK_SHIFT) ? SB_HORZ : SB_VERT;
-    int cells_to_wheel = (WORD)wheel_lines * GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
-
-    sci.fMask = SIF_POS;
-    GetScrollInfo(hwnd, nbar, &sci);
-    sci.nPos -= cells_to_wheel * pgl->pixelw;
-    SetScrollInfo(hwnd, nbar, &sci, TRUE);
-    InvalidateRect(hwnd, nullptr, FALSE);
     return 0;
 }
 
 LRESULT onSize(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     switch (wparam) {
     case SIZE_RESTORED:
     case SIZE_MAXIMIZED:
@@ -665,17 +622,17 @@ LRESULT onSize(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onSizing(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    //limit the window size
+    //limit the window msize
     PRECT pwrect = (PRECT)lparam;
     bool left = (wparam == WMSZ_LEFT) || (wparam == WMSZ_TOPLEFT) || (wparam == WMSZ_BOTTOMLEFT);
     bool right = (wparam == WMSZ_RIGHT) || (wparam == WMSZ_TOPRIGHT) || (wparam == WMSZ_BOTTOMRIGHT);
     bool top = (wparam == WMSZ_TOP) || (wparam == WMSZ_TOPLEFT) || (wparam == WMSZ_TOPRIGHT);
     bool bottom = (wparam == WMSZ_BOTTOM) || (wparam == WMSZ_BOTTOMLEFT) || (wparam == WMSZ_BOTTOMRIGHT);
 
-    if (left) pwrect->left = min(pwrect->left, pwrect->right - GLW_MINWNDW);
-    if (right) pwrect->right = max(pwrect->right, pwrect->left + GLW_MINWNDW);
-    if (top) pwrect->top = min(pwrect->top, pwrect->bottom - GLW_MINWNDH);
-    if (bottom) pwrect->bottom = max(pwrect->bottom, pwrect->top + GLW_MINWNDH);
+    if (left) pwrect->left = std::min(pwrect->left, pwrect->right - GLW_MINWNDW);
+    if (right) pwrect->right = std::max(pwrect->right, pwrect->left + GLW_MINWNDW);
+    if (top) pwrect->top = std::min(pwrect->top, pwrect->bottom - GLW_MINWNDH);
+    if (bottom) pwrect->bottom = std::max(pwrect->bottom, pwrect->top + GLW_MINWNDH);
 
     //display or hide the scroll bar
     PostMessage(hwnd, WM_GLSETSCROLL, TRUE, 0);
@@ -683,7 +640,7 @@ LRESULT onSizing(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(hwnd, &ps);
 
@@ -695,13 +652,11 @@ LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 
     //paint the background
     HBRUSH hbr = (HBRUSH)GetStockObject(DC_BRUSH);
-    SetDCBrushColor(hdcbuffer, GLW_DEFCOLMBG);
+    SetDCBrushColor(hdcbuffer, GLW_COLBLANK);
     FillRect(hdcbuffer, &crect, hbr);
 
     //decide the map position and draw map
-    POINT ori;
-    getMapOriginPoint(hwnd, &ori);
-    pgl->draw(hdcbuffer, ori.x, ori.y, &ps.rcPaint, pgl->state & GLRT_SF_UNBOUND);
+    pgl->draw(hdcbuffer, ps.rcPaint, pgl->offset(hwnd));
 
     //draw help information
     if (pgl->state & GLRT_SF_HELP) {
@@ -729,9 +684,9 @@ LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onTimer(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GameOfLifeInfo* pgl = (GameOfLifeInfo*)GetWindowLongPtr(hwnd, GLWC_EXDATAOFF);
-    pgl->update(pgl->state & GLRT_SF_UNBOUND);
-    PostMessage(hwnd, WM_GLSETTEXT, FALSE, 0);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+    pgl->map->next(pgl->state & GLRT_SF_INFMAP);
+    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     InvalidateRect(hwnd, nullptr, FALSE);
     return 0;
 }
@@ -782,7 +737,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-int runGame(GameOfLifeInfo* pgl, HINSTANCE hInstance, int nCmdShow) {
+int runGame(GLRuntime* pRuntime, HINSTANCE hInstance, int nCmdShow) {
     HWND hwnd = CreateWindow(
         TEXT(GLWC_CLSNAME),
         TEXT(GLW_WNDNAME),
@@ -792,7 +747,7 @@ int runGame(GameOfLifeInfo* pgl, HINSTANCE hInstance, int nCmdShow) {
         nullptr,
         nullptr,
         hInstance,
-        pgl
+        pRuntime
     );
 
     ShowWindow(hwnd, nCmdShow);
@@ -807,103 +762,86 @@ int runGame(GameOfLifeInfo* pgl, HINSTANCE hInstance, int nCmdShow) {
 }
 
 
-int fromFile(const tstring& fname, HINSTANCE hInstance, int nCmdShow) {
-    std::ifstream file(fname);
-    if (!file.is_open()) return RETVAL_ERRFOPEN;
-
-    //header part: FT W H PW
-    int ret = RETVAL_BADFTYPE;
-    int ftype, w, h, pw;
-    file >> ftype >> w >> h >> pw;
-    if (file.fail()) return ret;
-    if (w <= 0 || h <= 0) return ret;
-    pw = min(max(pw, GLW_MINPIXW), GLW_MAXPIXW);
-
-    switch (ftype) {
-    case GLFT_BITMAP: { //0 1 1 0 1 ...
-        bool* map = new bool[w * h] {};
-        for (int i = 0; i < w * h; i++) file >> map[i];
-        if (!file.fail()) {
-            file.close();
-            GameOfLifeInfo* pgl = new GameOfLifeInfo(w, h, map, pw);
-            ret = runGame(pgl, hInstance, nCmdShow);
-            delete pgl;
-        }
-        delete[] map;
-        break;
+bool initFromStream(GLMap& map, std::istream& data, int dtype) {
+    switch (dtype) {
+    case GLDT_RATIO: {  //ratio
+        float ratio = 0;
+        data >> ratio;
+        map.init(ratio, std::random_device{}());
+        return true;
     }
-    case GLFT_COORD: {  //x y x y ...
-        std::vector<POINT> coords;
-        POINT pos;
-        while (!file.eof()) {
-            file >> pos.x >> pos.y;
-            if (file.fail()) break;
-            coords.emplace_back(pos);
-        }
-        if (!coords.empty()) {
-            file.close();
-            GameOfLifeInfo* pgl = new GameOfLifeInfo(w, h, coords, pw);
-            ret = runGame(pgl, hInstance, nCmdShow);
-            delete pgl;
-        }
-        break;
+    case GLDT_BITMAP: { //0 1 1 0 1 ...
+        std::vector<char> bitmap;   //std::vector<bool> is not an array
+        bool cell;
+        while (data >> cell) bitmap.push_back(cell);
+        map.init((bool*)bitmap.data(), bitmap.size());
+        return true;
     }
-    case GLFT_RECT: {   //left top right bottom ...
-        std::vector<RECT> rects;
-        RECT rect;
-        while (!file.eof()) {
-            file >> rect.left >> rect.top >> rect.right >> rect.bottom;
-            if (file.fail()) break;
-            rects.emplace_back(rect);
-        }
-        if (!rects.empty()) {
-            file.close();
-            GameOfLifeInfo* pgl = new GameOfLifeInfo(w, h, rects, pw);
-            ret = runGame(pgl, hInstance, nCmdShow);
-            delete pgl;
-        }
-        break;
+    case GLDT_COORD: {  //x y x y ...
+        std::vector<POINT> coord;
+        POINT pt;
+        while (data >> pt.x >> pt.y) coord.push_back(pt);
+        map.init(coord.data(), coord.size());
+        return true;
+    }
+    case GLDT_RECT: {   //left top right bottom ...
+        std::vector<RECT> rect;
+        RECT rc;
+        while (data >> rc.left >> rc.top >> rc.right >> rc.bottom) rect.push_back(rc);
+        map.init(rect.data(), rect.size());
+        return true;
     }
     }
-    return ret;
+    return false;
 }
 
 int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
-    tstringstream cmdl(lpCmdLine);
-    tstring str;
-    int ret = RETVAL_CMDFAIL;
-    cmdl >> str;
-    if (cmdl.fail()) {  //empty cmdl
-        GameOfLifeInfo* pgl = new GameOfLifeInfo(GLM_DEFMAPW, GLM_DEFMAPH, GLM_DEFRATIO);
-        ret = runGame(pgl, hInstance, nCmdShow);
-        delete pgl;
-    }
-    else if (!str.compare(TEXT("-h"))) {    //cmdl: -h
-        ret = RETVAL_CMDHELP;
-    }
-    else if (!str.compare(TEXT("-r"))) {    //cmdl: -r W H RATIO [PW]
-        int w, h, pw = GLW_DEFPIXW;
-        double ratio;
-        cmdl >> w >> h >> ratio;
-        if (!cmdl.fail()) {
-            if (!cmdl.eof()) cmdl >> pw;
-            pw = min(max(pw, GLW_MINPIXW), GLW_MAXPIXW);
-            GameOfLifeInfo* pgl = new GameOfLifeInfo(w, h, ratio, pw);
-            ret = runGame(pgl, hInstance, nCmdShow);
-            delete pgl;
+    tstring cmdl(lpCmdLine);
+    if (cmdl.empty()) { //empty cmdl
+        GLMap map(GLM_DEFMAPW, GLM_DEFMAPH);
+        GLRuntime runtime = { &map };
+        map.init(GLM_DEFRATIO, std::random_device{}());
+        return runGame(&runtime, hInstance, nCmdShow);
+    } else if (!cmdl.compare(0, 2, TEXT("-r"))) {   //cmdl: -r WIDTH HEIGHT SCALE RATIO
+        tstringstream data(cmdl.substr(2));
+        int width, height, scale;
+        float ratio;
+        if (data >> width >> height >> scale >> ratio) {
+            if (width > 0 && height > 0) {
+                GLMap map(width, height);
+                GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
+                map.init(ratio, std::random_device{}());
+                return runGame(&runtime, hInstance, nCmdShow);
+            }
         }
+        return RETVAL_BADARGS;
+    } else if (cmdl.find_first_of(TEXT(' ')) == cmdl.npos || cmdl.find_first_of(TEXT('"'), 1) == cmdl.size() - 1) { //cmdl: FILENAME
+        tstring fname = (cmdl[0] == TEXT('"')) ? cmdl.substr(1, cmdl.size() - 2) : cmdl;    //remove quotes
+        std::ifstream file(fname.c_str());  //compatible with GCC
+        if (file.is_open()) {
+            int width, height, scale, dtype;
+            if (file >> width >> height >> scale >> dtype) {
+                if (width > 0 && height > 0) {
+                    GLMap map(width, height);
+                    GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
+                    if (initFromStream(map, file, dtype)) {
+                        file.close();
+                        return runGame(&runtime, hInstance, nCmdShow);
+                    }
+                }
+            }
+            return RETVAL_BADDATA;
+        }
+        return RETVAL_ERROPEN;
     }
-    else {  //cmdl: FILENAME
-        ret = fromFile(str, hInstance, nCmdShow);
-    }
-    return ret;
+    return RETVAL_CMDFAIL;
 }
 
 
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow) {
     WNDCLASSEX wndc = { sizeof(WNDCLASSEX) };
     wndc.cbClsExtra = 0;
-    wndc.cbWndExtra = GLWC_EXDATASIZE;
+    wndc.cbWndExtra = GLWC_EXSIZE;
     wndc.hInstance = hInstance;
     wndc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wndc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
@@ -919,15 +857,15 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdL
     int ret = fromCmdLine(lpCmdLine, hInstance, nCmdShow);
     switch (ret) {
     case RETVAL_CMDFAIL:
-        MessageBox(nullptr, TEXT("Invalid cmdl args\n" GLSTR_CMDHELP), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
+        MessageBox(nullptr, TEXT("Syntax error"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
         break;
-    case RETVAL_CMDHELP:
-        MessageBox(nullptr, TEXT(GLSTR_CMDHELP "\n" GLSTR_FTDESC), TEXT(GLW_WNDNAME), MB_OK | MB_ICONINFORMATION);
+    case RETVAL_BADARGS:
+        MessageBox(nullptr, TEXT("Invalid arguments"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
         break;
-    case RETVAL_ERRFOPEN:
+    case RETVAL_ERROPEN:
         MessageBox(nullptr, TEXT("Fail to open file"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
         break;
-    case RETVAL_BADFTYPE:
+    case RETVAL_BADDATA:
         MessageBox(nullptr, TEXT("Bad file contents"), TEXT(GLW_WNDNAME), MB_OK | MB_ICONERROR);
         break;
     }

@@ -8,14 +8,17 @@ A simple implementation of classic *Bulls and Cows* game.
 
 - Adopt the form of **4** digits with **10** numbers from **[0~9]**.
 - Up to **10** chances in one game.
-- Support a **Standard** mode where each digit is unique.
-- Support a **Mastermind** mode where different digits can be the same.
+- Both **Standard** and **Mastermind** modes have been fully implemented.
+
+## Build Notes
+
+- **C++17** standard is required for compiling.
 
 ## Run
 
-Directly run the program without any arguments. The default mode should be **Standard**.
+Run the binary directly without any arguments. The default mode should be **Standard**.
 
-Use `Ctrl-Z`(Windows) or `Ctrl-D`(Linux) plus `Enter` to quit the program. If the program behaves abnormally, use `Ctrl-C` to abort it.
+Use `Ctrl-Z` (Windows) or `Ctrl-D` (Linux/macOS) followed by `Enter` to quit the program. If the program behaves abnormally, use `Ctrl-C` to abort it.
 
 ## Samples
 
@@ -61,6 +64,7 @@ A total of 5 chances were consumed.
 ============================================================
 ```
 
-## Notes
+## License
 
-- C++17 is required for compiling.
+Copyright (C) 2024 Gee Wang\
+Licensed under the [GNU GPL v3](../LICENSE).

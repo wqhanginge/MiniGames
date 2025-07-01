@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2024, Bulls and Cows by Gee Wang
+ * Licensed under the GNU GPL v3.
+ * C++17 standard is required.
+ */
+
+
 #include <iostream>
 
 #include <array>
@@ -20,8 +27,7 @@ template<size_t Size>
 class Bytes :public std::array<char, Size> {
     using _Base = std::array<char, Size>;
 public:
-    constexpr explicit operator std::string() const { return std::string(_Base::data(), Size); }
-    constexpr explicit operator std::string_view() const { return std::string_view(_Base::data(), Size); }
+    constexpr operator std::string_view() const { return std::string_view(_Base::data(), Size); }
 };
 
 using Guess = Bytes<COUNT>;
@@ -32,24 +38,26 @@ class SecretManager {
 public:
     SecretManager() :_secret(), _urng(std::random_device()()) {}
 
-    std::string string() const { return static_cast<std::string>(_secret); }
-    std::string_view string_view() const { return static_cast<std::string_view>(_secret); }
-
     void refresh(const bool master) {   //Mastermind gives non-unique digits, while Standard gives unique digits
-        if (master) { for (auto& digit : _secret) digit = SYMBOLS[_urng() % SYMBOLS.size()]; }
-        else { std::sample(SYMBOLS.begin(), SYMBOLS.end(), _secret.begin(), COUNT, _urng); }
-        std::shuffle(_secret.begin(), _secret.begin() + COUNT, _urng);
+        if (master) {
+            for (auto& digit : _secret) digit = SYMBOLS[_urng() % SYMBOLS.size()];
+        } else {
+            std::sample(SYMBOLS.begin(), SYMBOLS.end(), _secret.begin(), COUNT, _urng);
+        }
+        std::shuffle(_secret.begin(), _secret.end(), _urng);
     }
+
+    std::string_view secret() const { return static_cast<std::string_view>(_secret); }
     Result evaluate(const Guess& guess) const {
         size_t bulls = 0, cows = 0;
-        std::array<bool, COUNT * 2> mask = {};  //remember matched digits for both Guess and Secret
+        bool mask[2][COUNT] = {};   //remember matched digits for both Guess and Secret
         for (size_t shift = 0; shift < COUNT; shift++) {
             for (size_t offset = 0; offset < COUNT; offset++) {
                 size_t sec_idx = (offset + shift) % COUNT;
                 bool equal = (guess[offset] == _secret[sec_idx]);
-                cows += (!mask[offset] && !mask[COUNT + sec_idx] && equal);
-                mask[offset] |= equal;
-                mask[COUNT + sec_idx] |= equal;
+                cows += (!mask[0][offset] && !mask[1][sec_idx] && equal);
+                mask[0][offset] |= equal;
+                mask[1][sec_idx] |= equal;
             }
             bulls += cows * !shift;
         }
@@ -62,19 +70,19 @@ private:
 };
 
 
-inline bool isSpace(unsigned char c) {
+bool isSpace(unsigned char c) {
     return std::isspace(c);
 }
 
-inline bool isDigit(unsigned char c) {
+bool isDigit(unsigned char c) {
     return std::isdigit(c);
 }
 
-inline bool isNotSpaceAndDigit(unsigned char c) {
+bool isNotSpaceAndDigit(unsigned char c) {
     return !std::isspace(c) && !std::isdigit(c);
 }
 
-inline bool equalAlpha(unsigned char c, unsigned char alpha) {
+bool equalAlpha(unsigned char c, unsigned char alpha) {
     return std::isalpha(c) && std::isalpha(alpha) && std::tolower(c) == std::tolower(alpha);
 }
 
@@ -108,7 +116,7 @@ std::string title(const bool master) {
     return str;
 }
 
-std::string tips(const bool valid, const size_t turn, const Guess& guess, const size_t bulls, const size_t cows) {
+std::string tips(const size_t turn, const bool valid, std::string_view guess, const size_t bulls, const size_t cows) {
     std::string str;
     str += std::string(40, ' ') + std::to_string(turn) + ".\t";
     str += (valid) ? std::string(guess) : std::string(guess.size(), ' ');
@@ -117,17 +125,16 @@ std::string tips(const bool valid, const size_t turn, const Guess& guess, const 
     return str;
 }
 
-std::string finish(const size_t used_chances, const SecretManager& secret_mgr) {
+std::string finish(const size_t tries, std::string_view secret) {
     std::string str;
-    if (used_chances <= CHANCES) {  //win
+    if (tries <= CHANCES) { //win
         str += "Congratulations! You got the Answer: ";
-        str += secret_mgr.string_view();
-        str += "\nA total of " + std::to_string(used_chances) + " chances were consumed.";
-    }
-    else {  //loss
+        str += secret;
+        str += "\nA total of " + std::to_string(tries) + " chances were consumed.";
+    } else {    //loss
         str += "Sorry! You ran out of all chances.\n";
         str += "The Answer is: ";
-        str += secret_mgr.string_view();
+        str += secret;
     }
     str += '\n' + std::string(60, '=');
     return str;
@@ -148,19 +155,18 @@ int main() {
         std::cout << title(master) << std::endl;
         secret_mgr.refresh(master);
 
-        size_t chance = 0;
-        while (chance < CHANCES) {
+        size_t chance;
+        for (chance = 0; chance < CHANCES; chance++) {
             std::cout << "Make a Guess> ";
             if (!std::getline(std::cin, line).good()) return 0;
 
             bool valid = readGuessFromLine(guess, line, master);
             auto [bulls, cows] = (valid) ? secret_mgr.evaluate(guess) : Result(0, 0);
 
-            std::cout << tips(valid, chance + 1, guess, bulls, cows) << std::endl;
+            std::cout << tips(chance + 1, valid, guess, bulls, cows) << std::endl;
             if (bulls == guess.size()) break;
-            else chance++;
         }
-        std::cout << '\n' << finish(chance + 1, secret_mgr) << '\n' << std::endl;
+        std::cout << '\n' << finish(chance + 1, secret_mgr.secret()) << '\n' << std::endl;
     }
     return 0;
 }
