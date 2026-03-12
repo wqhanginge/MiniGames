@@ -15,30 +15,28 @@ constexpr size_t DSIZE = DIGITS.size();
 constexpr char BLANK = DIGITS[0];
 
 
-class SudokuMap :public std::array<char, MAP> {
-    using _Base = std::array<char, MAP>;
-    size_t _doff(size_t offset) const { return static_cast<size_t>(_Base::at(offset) - BLANK); }
+class SudokuMap : public std::array<char, MAP> {
+    size_t _doff(size_t offset) const { return static_cast<size_t>((*this)[offset] - BLANK); }
 
 public:
-    SudokuMap() { _Base::fill(BLANK); }
+    SudokuMap() { fill(BLANK); }
     explicit SudokuMap(std::string_view map) :SudokuMap() {
         for (size_t i = 0; i < std::min(MAP, map.size()); i++) {
-            _Base::at(i) = DIGITS[std::min(static_cast<size_t>(map[i] - BLANK), DSIZE) % DSIZE];
+            (*this)[i] = DIGITS[std::min(static_cast<size_t>(map[i] - BLANK), DSIZE) % DSIZE];
         }
     }
 
-    constexpr explicit operator std::string_view() const { return std::string_view(_Base::data(), MAP); }
+    constexpr explicit operator std::string_view() const { return std::string_view(data(), MAP); }
     bool unique(const size_t offset) const {
-        size_t x = offset / ROW, y = offset % ROW, b = ((x / SEG) * ROW + (y / SEG)) * SEG;
-        bool duplicate = false, flags[3][DSIZE] = {};
-        for (size_t i = 0; i < ROW; i++) {
-            size_t ix = _doff(x * ROW + i), iy = _doff(i * ROW + y), ib = _doff(b + (i / SEG) * ROW + (i % SEG));
-            duplicate |= flags[0][ix] || flags[1][iy] || flags[2][ib];
-            flags[0][ix] |= static_cast<bool>(ix);
-            flags[1][iy] |= static_cast<bool>(iy);
-            flags[2][ib] |= static_cast<bool>(ib);
+        if (offset >= MAP) throw std::out_of_range("invalid map offset");
+        size_t r = offset / ROW, c = offset % ROW, b = ((r / SEG) * ROW + (c / SEG)) * SEG;
+        for (size_t i = 0, flags = 0; i < ROW; i++) {
+            size_t ir = _doff(r * ROW + i), ic = _doff(i * ROW + c), ib = _doff(b + (i / SEG) * ROW + (i % SEG));
+            size_t mask = (0x00000001ULL << ir) | (0x00000400ULL << ic) | (0x00100000ULL << ib);
+            if (flags & mask & 0x3FEFFBFEULL) return false;
+            flags |= mask;
         }
-        return !duplicate;
+        return true;
     }
 };
 
