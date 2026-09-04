@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2024, Bulls and Cows by Gee Wang
- * Licensed under the GNU GPL v3.
+ * Licensed under the GPLv3.
  * C++17 standard is required.
  */
 
@@ -24,10 +24,9 @@ static_assert(COUNT <= SYMBOLS.size(), "insufficient types of symbols");
 
 
 template<size_t Size>
-class Bytes :public std::array<char, Size> {
-    using _Base = std::array<char, Size>;
+class Bytes : public std::array<char, Size> {
 public:
-    constexpr operator std::string_view() const { return std::string_view(_Base::data(), Size); }
+    constexpr operator std::string_view() const { return std::string_view{ this->data(), Size }; }
 };
 
 using Guess = Bytes<COUNT>;
@@ -36,7 +35,7 @@ using Result = std::pair<size_t, size_t>;
 
 class SecretManager {
 public:
-    SecretManager() :_secret(), _urng(std::random_device()()) {}
+    SecretManager() : _secret(), _urng(std::random_device{}()) {}
 
     void refresh(const bool master) {   //Mastermind gives non-unique digits, while Standard gives unique digits
         if (master) {
@@ -61,7 +60,7 @@ public:
             }
             bulls += cows * !shift;
         }
-        return Result(bulls, cows - bulls);
+        return Result{ bulls, cows - bulls };
     }
 
 private:
@@ -70,16 +69,16 @@ private:
 };
 
 
-bool isSpace(unsigned char c) {
-    return std::isspace(c);
-}
-
 bool isDigit(unsigned char c) {
     return std::isdigit(c);
 }
 
-bool isNotSpaceAndDigit(unsigned char c) {
-    return !std::isspace(c) && !std::isdigit(c);
+bool isNotSpace(unsigned char c) {
+    return !std::isspace(c);
+}
+
+bool isNotDigit(unsigned char c) {
+    return !std::isdigit(c);
 }
 
 bool equalAlpha(unsigned char c, unsigned char alpha) {
@@ -87,39 +86,54 @@ bool equalAlpha(unsigned char c, unsigned char alpha) {
 }
 
 bool readGuessFromLine(Guess& guess, std::string_view line, const bool master) {
-    if (std::any_of(line.begin(), line.end(), isNotSpaceAndDigit))
+    std::string buff;
+    std::copy_if(line.begin(), line.end(), std::back_inserter(buff), isNotSpace);
+    std::sort(buff.begin(), buff.end());
+
+    if (buff.size() != guess.size())
         return false;
-    if (std::count_if(line.begin(), line.end(), isDigit) != guess.size())
+    if (std::any_of(buff.begin(), buff.end(), isNotDigit))
         return false;
+    if (!master && std::adjacent_find(buff.begin(), buff.end()) != buff.end())
+        return false;
+
     std::copy_if(line.begin(), line.end(), guess.begin(), isDigit);
-    if (!master && std::unique(guess.begin(), guess.end()) != guess.end())
-        return false;
     return true;
 }
 
-bool readYnFromLine(std::string_view line) {
-    auto iter = std::find_if_not(line.begin(), line.end(), isSpace);
-    return iter != line.end() && equalAlpha(*iter, 'y');
+bool testAlphaFromLine(std::string_view line, const char alpha) {
+    auto iter = std::find_if(line.begin(), line.end(), isNotSpace);
+    size_t size = std::count_if(iter, line.end(), isNotSpace);
+    return size == 1 && equalAlpha(*iter, alpha);
 }
 
 
 std::string_view mode(const bool master) {
-    return (master) ? "<Mastermind>" : "<Standard>";
+    return (master) ? "Mastermind" : "Standard";
+}
+
+std::string help() {
+    std::string str;
+    str += std::string(60, '=') + '\n';
+    str += std::string(23, ' ') + "Bulls and Cows" + '\n';
+    str += std::string(11, ' ') + "s: start    q: quit    t: toggle mode\n";
+    str += std::string(60, '=');
+    return str;
 }
 
 std::string title(const bool master) {
     std::string str;
     str += std::string(60, '=') + '\n';
-    str += std::string(17, ' ') + "Bulls and Cows: ";
+    str += std::string(18 - master, ' ') + "Bulls and Cows: ";
     str += mode(master);
     str += '\n' + std::string(60, '=');
     return str;
 }
 
-std::string tips(const size_t turn, const bool valid, std::string_view guess, const size_t bulls, const size_t cows) {
+std::string tips(const size_t turn, std::string_view guess, const size_t bulls, const size_t cows) {
     std::string str;
     str += std::string(40, ' ') + std::to_string(turn) + ".\t";
-    str += (valid) ? std::string(guess) : std::string(guess.size(), ' ');
+    str += guess;
     str += std::string(4, ' ');
     str += std::to_string(bulls) + 'A' + std::to_string(cows) + 'B';
     return str;
@@ -147,23 +161,27 @@ int main() {
     std::string line;
     bool master = false;
 
+    std::cout << help() << std::endl;
     while (true) {
-        std::cout << mode(master) << ": Switch Mode?<y/N> ";
+        std::cout << mode(master) << "> ";
         if (!std::getline(std::cin, line).good()) return 0;
-        master ^= readYnFromLine(line);
 
+        if (testAlphaFromLine(line, 'q')) return 0;
+        master ^= testAlphaFromLine(line, 't');
+
+        if (!testAlphaFromLine(line, 's')) continue;
         std::cout << title(master) << std::endl;
         secret_mgr.refresh(master);
 
         size_t chance;
         for (chance = 0; chance < CHANCES; chance++) {
-            std::cout << "Make a Guess> ";
+            std::cout << "Guess> ";
             if (!std::getline(std::cin, line).good()) return 0;
 
-            bool valid = readGuessFromLine(guess, line, master);
-            auto [bulls, cows] = (valid) ? secret_mgr.evaluate(guess) : Result(0, 0);
+            if (!readGuessFromLine(guess, line, master)) guess.fill(' ');
+            auto [bulls, cows] = secret_mgr.evaluate(guess);
 
-            std::cout << tips(chance + 1, valid, guess, bulls, cows) << std::endl;
+            std::cout << tips(chance + 1, guess, bulls, cows) << std::endl;
             if (bulls == guess.size()) break;
         }
         std::cout << '\n' << finish(chance + 1, secret_mgr.secret()) << '\n' << std::endl;

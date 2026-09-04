@@ -15,7 +15,7 @@ A simple simulator for Conway's *Game of Life*.
 ## Build Notes
 
 - **C++14** standard is required for compiling.
-- Ensure the `SUBSYSTEM` is set to `WINDOWS`.
+- Ensure the subsystem is `WINDOWS`.
 - **Unicode** version is available by defining the `UNICODE` and `_UNICODE` macros.
 
 ## Run
@@ -42,7 +42,7 @@ Bitmap: 1 [0 1 1 0 ...]                 # 1 for alive and 0 for dead
 
 Additionally, the program supports a command-line option for quick random initialization.
 ```sh
-gameoflife -r <MapWidth> <MapHeight> <MapScale> <Ratio>
+game_of_life.exe -r <MapWidth> <MapHeight> <MapScale> <Ratio>
 ```
 
 ## Runtime Operations
@@ -76,4 +76,4 @@ Take care of your map and enjoy!
 ## License
 
 Copyright (C) 2023 Gee Wang\
-Licensed under the [GNU GPL v3](../LICENSE).
+Licensed under the [GPLv3](../LICENSE).

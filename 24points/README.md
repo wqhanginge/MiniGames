@@ -1,8 +1,8 @@
-# 24 Point Solver
+# 24 Points Solver
 
 **AppType: Console**
 
-Solve a specified *24 Point* problem.
+Solve a specified *24 Points* problem.
 
 ## Features
 
@@ -14,14 +14,14 @@ Solve a specified *24 Point* problem.
 
 ## Build Notes
 
-- C++11 standard is required for compiling.
+- **C++11** standard is required for compiling.
 
 ## Usage
 
 ### Syntax
 
 ```sh
-24point [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] <target> <num>[:...] [--op=<op>[...]]
+24points [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] <target> <num>[:...] [--op=<op>[...]]
 
 Positional arguments:
   target                expected result value of expressions
@@ -45,22 +45,22 @@ Optional arguments:
 
 ### Examples
 
-Solve a 24-point problem using fixed input numbers.
+Solve a 24-points problem using fixed input numbers.
 ```sh
-24point 24 5:6:7:6
+24points 24 5:6:7:6
 ```
 
-Solve a 32-point problem using fixed input numbers with specified operators.
+Solve a 32-points problem using fixed input numbers with specified operators.
 ```sh
-24point 32 4:3:6:8:4 --op=++*
+24points 32 4:3:6:8:4 --op=++*
 ```
 
-Solve a 48-point problem by evaluating every possible combination of three input numbers, where each number is drawn from the range [1, 9], ensuring that only one valid expression is selected per combination.
+Solve a 48-points problem by evaluating every possible combination of three input numbers, where each number is drawn from the range [1, 9], ensuring that only one valid expression is selected per combination.
 ```sh
-24point -p max 48 3 -r 1:9
+24points -p max 48 3 -r 1:9
 ```
 
 ## License
 
 Copyright (C) 2020 Gee Wang\
-Licensed under the [GNU GPL v3](../LICENSE).
+Licensed under the [GPLv3](../LICENSE).

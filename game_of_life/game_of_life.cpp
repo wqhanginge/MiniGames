@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2023, Game of Life by Gee Wang
- * Licensed under the GNU GPL v3.
+ * Licensed under the GPLv3.
  * C++14 standard is required.
  */
 
@@ -80,21 +80,20 @@
 #define GLDT_COORD      2
 #define GLDT_RECT       3
 
-#define GLSTR_WNDHELP   "\
- ESC\texit \n\
- w\tzoom in \n\
- s\tzoom out \n\
- a\tslow down \n\
- d\tspeed up \n\
- h\thelp \n\
- p\tpause \n\
- i\tinsert mode \n\
- n\tnext step \n\
- e\ttoggle edge \n\
- BS\tclear map \n\
- LMB\tspawn cell \n\
- RMB\tkill cell \
-"
+#define GLSTR_WNDHELP   \
+    " ESC\texit \n" \
+    " w\tzoom in \n" \
+    " s\tzoom out \n" \
+    " a\tslow down \n" \
+    " d\tspeed up \n" \
+    " h\thelp \n" \
+    " p\tpause \n" \
+    " i\tinsert mode \n" \
+    " n\tnext step \n" \
+    " e\ttoggle edge \n" \
+    " BS\tclear map \n" \
+    " LMB\tspawn cell \n" \
+    " RMB\tkill cell "
 
 #define RETVAL_EXIT     0
 #define RETVAL_CMDFAIL  1
@@ -108,12 +107,12 @@ using tstringstream = std::basic_stringstream<TCHAR>;
 
 class Speed {
     static const int _count = 8;
-    static const struct _Val { int interval; int rps; LPCTSTR description; } _vlist[_count];
+    static const struct _Val { int intvl; int rps; LPCTSTR desc; } _vlist[_count];
 
 public:
-    enum Option :int { MANUAL, EXSLOW, VSLOW, SLOW, NORMAL, FAST, VFAST, EXFAST };
+    enum Option : int { MANUAL, EXSLOW, VSLOW, SLOW, NORMAL, FAST, VFAST, EXFAST };
 
-    Speed() :_opt(NORMAL) {}
+    Speed() : _opt(NORMAL) {}
     Speed(const Option opt) { _assign(opt); }
 
     friend bool operator==(const Speed& lhs, const Speed& rhs) { return lhs._opt == rhs._opt; }
@@ -131,9 +130,9 @@ public:
     const Speed operator--(int) { Speed tmp = *this; --*this; return tmp; }
     Speed operator-(int n) const { return *this + (-n); }
 
-    int interval() const { return _vlist[_opt].interval; }
+    int intvl() const { return _vlist[_opt].intvl; }
     int rps() const { return _vlist[_opt].rps; }
-    LPCTSTR description() const { return _vlist[_opt].description; }
+    LPCTSTR desc() const { return _vlist[_opt].desc; }
 
 private:
     Option _opt;
@@ -146,18 +145,16 @@ const Speed::_Val Speed::_vlist[Speed::_count] = {
     { -1, 0, TEXT("Manual") },
     { 1000, 1, TEXT("Extremly Slow") },
     { 500, 2, TEXT("Very Slow") },
-    { 250, 4, TEXT("Slow") },
+    { 200, 5, TEXT("Slow") },
     { 100, 10, TEXT("Normal") },
     { 50, 20, TEXT("Fast") },
-    { 25, 40, TEXT("Very Fast") },
+    { 20, 50, TEXT("Very Fast") },
     { 10, 100, TEXT("Extremly Fast") },
 };
 
 class GLMap {
 public:
-    LPCTSTR name = TEXT(GLW_WNDNAME);
-
-    GLMap(size_t width, size_t height) :_width(width), _height(height), _gen(0) { _alloc(); }
+    GLMap(size_t width, size_t height) : _width(width), _height(height), _gen(0) { _alloc(); }
     GLMap(const GLMap&) = delete;
     GLMap(GLMap&&) = delete;
     ~GLMap() { _free(); }
@@ -253,6 +250,7 @@ struct GLRuntime {
     BYTE state = GLRT_SF_PAUSE | GLRT_SF_HELP;
     Speed speed = Speed::NORMAL;
     POINT target = { -1 , -1 };
+    LPCTSTR name = TEXT(GLW_WNDNAME);
     COLORREF col_blank = GLW_COLBLANK;
     COLORREF col_cell = GLW_COLCELL;
     COLORREF col_barrier = GLW_COLBARRIER;
@@ -330,7 +328,7 @@ LRESULT onCreate(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     SetScrollInfo(hwnd, SB_VERT, &sci, FALSE);
 
     if (!GLRTISFROZEN(pgl->state) && pgl->speed != Speed::MANUAL)
-        SetTimer(hwnd, GLRT_TIMERID, pgl->speed.interval(), nullptr);
+        SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
 
     PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     return 0;
@@ -347,7 +345,7 @@ LRESULT onGLPause(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     if (GLRTISFROZEN(pgl->state)) { //resume
         pgl->state &= ~(GLRT_SF_PAUSE | GLRT_SF_INSERT);
         if (pgl->speed != Speed::MANUAL)
-            SetTimer(hwnd, GLRT_TIMERID, pgl->speed.interval(), nullptr);
+            SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
     } else {    //pause
         pgl->state |= GLRT_SF_PAUSE;
         KillTimer(hwnd, GLRT_TIMERID);
@@ -374,7 +372,7 @@ LRESULT onGLSpeed(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     if (pgl->speed == Speed::MANUAL) {
         KillTimer(hwnd, GLRT_TIMERID);
     } else if (!GLRTISFROZEN(pgl->state)) {
-        SetTimer(hwnd, GLRT_TIMERID, pgl->speed.interval(), nullptr);
+        SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
     }
     PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     return 0;
@@ -443,7 +441,7 @@ LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     tstringstream text;
 
-    text << pgl->map->name << TEXT(':') << TEXT("  ");
+    text << pgl->name << TEXT(':') << TEXT("  ");
     text << pgl->map->gen() << TEXT("  ");
 
     if (pgl->state & GLRT_SF_INSERT) {
@@ -452,7 +450,7 @@ LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         text << TEXT("Pause") << TEXT("  ");
     }
 
-    text << pgl->speed.description();
+    text << pgl->speed.desc();
     if (pgl->speed != Speed::MANUAL)
         text << TEXT('[') << pgl->speed.rps() << TEXT(" RPS") << TEXT(']');
     text << TEXT("  ");
@@ -771,7 +769,7 @@ bool initFromStream(GLMap& map, std::istream& data, int dtype) {
         return true;
     }
     case GLDT_BITMAP: { //0 1 1 0 1 ...
-        std::vector<char> bitmap;   //std::vector<bool> is not an array
+        std::vector<BYTE> bitmap;   //std::vector<bool> is not an array
         bool cell;
         while (data >> cell) bitmap.push_back(cell);
         map.init((bool*)bitmap.data(), bitmap.size());
@@ -796,7 +794,7 @@ bool initFromStream(GLMap& map, std::istream& data, int dtype) {
 }
 
 int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
-    tstring cmdl(lpCmdLine);
+    tstring cmdl = lpCmdLine;
     if (cmdl.empty()) { //empty cmdl
         GLMap map(GLM_DEFMAPW, GLM_DEFMAPH);
         GLRuntime runtime = { &map };
@@ -806,33 +804,29 @@ int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
         tstringstream data(cmdl.substr(2));
         int width, height, scale;
         float ratio;
-        if (data >> width >> height >> scale >> ratio) {
-            if (width > 0 && height > 0) {
-                GLMap map(width, height);
-                GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
-                map.init(ratio, std::random_device{}());
-                return runGame(&runtime, hInstance, nCmdShow);
-            }
-        }
-        return RETVAL_BADARGS;
+
+        data >> width >> height >> scale >> ratio;
+        if (!data || width <= 0 || height <= 0) return RETVAL_BADARGS;
+
+        GLMap map(width, height);
+        GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
+        map.init(ratio, std::random_device{}());
+        return runGame(&runtime, hInstance, nCmdShow);
     } else if (cmdl.find_first_of(TEXT(' ')) == cmdl.npos || cmdl.find_first_of(TEXT('"'), 1) == cmdl.size() - 1) { //cmdl: FILENAME
         tstring fname = (cmdl[0] == TEXT('"')) ? cmdl.substr(1, cmdl.size() - 2) : cmdl;    //remove quotes
         std::ifstream file(fname.c_str());  //compatible with GCC
-        if (file.is_open()) {
-            int width, height, scale, dtype;
-            if (file >> width >> height >> scale >> dtype) {
-                if (width > 0 && height > 0) {
-                    GLMap map(width, height);
-                    GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
-                    if (initFromStream(map, file, dtype)) {
-                        file.close();
-                        return runGame(&runtime, hInstance, nCmdShow);
-                    }
-                }
-            }
-            return RETVAL_BADDATA;
-        }
-        return RETVAL_ERROPEN;
+        if (!file.is_open()) return RETVAL_ERROPEN;
+
+        int width, height, scale, dtype;
+        file >> width >> height >> scale >> dtype;
+        if (!file || width <= 0 || height <= 0) return RETVAL_BADDATA;
+
+        GLMap map(width, height);
+        GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
+        if (!initFromStream(map, file, dtype)) return RETVAL_BADDATA;
+
+        file.close();
+        return runGame(&runtime, hInstance, nCmdShow);
     }
     return RETVAL_CMDFAIL;
 }

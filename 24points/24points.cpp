@@ -1,6 +1,6 @@
 /*
- * Copyright (C) 2020, 24 Point Solver by Gee Wang
- * Licensed under the GNU GPL v3.
+ * Copyright (C) 2020, 24 Points Solver by Gee Wang
+ * Licensed under the GPLv3.
  * C++11 standard is required.
  */
 
@@ -51,7 +51,7 @@ constexpr Elem OP_PRIBIT = 0x02;    //high priority bit
 #pragma warning(pop)
 
 constexpr auto USAGE = "\
-24point [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] <target> <num>[:...] [--op=<op>[...]]\n\n\
+24points [-v] [-j <n>] [-o <file>] [-p <level>] [-r <min>:<max>] <target> <num>[:...] [--op=<op>[...]]\n\n\
 Positional arguments:\n\
   target                expected result value of expressions\n\
   num                   non-negative integers as input numbers\n\n\
@@ -248,7 +248,7 @@ size_t chooseRecursive(ExprList& results, Expr& expr, const size_t idx, const El
 ExprList chooseWithReplace(const Expr& fixed, const size_t expr_size, const Elem min, const Elem max) {
     size_t fix_size = std::min(fixed.size(), expr_size);
 
-    Expr expr(fixed);
+    Expr expr = fixed;
     expr.resize(expr_size, OP_NOP);
 
     ExprList results;
@@ -376,8 +376,7 @@ std::string formatSolutions(const ExprList& sols) {
             for (auto elem : expr.substr(1))    //skip OP_SIG
                 str += std::to_string(elem) + ' ';
             str += ":  ";
-        } else {
-            if (expr.empty()) continue;
+        } else if (!expr.empty()) {
             str += decode(expr) + "  ";
         }
     }
@@ -386,7 +385,8 @@ std::string formatSolutions(const ExprList& sols) {
 
 std::string formatArgs() {
     std::string str;
-    str += "  target = " + std::to_string(args_.target) + "  ";
+    str += "  ";
+    str += "target = " + std::to_string(args_.target) + "  ";
     if (args_.flags & F_RANGENUM) { //ranged numbers
         str += "min = " + std::to_string(args_.rmin) + "  ";
         str += "max = " + std::to_string(args_.rmax) + "  ";
