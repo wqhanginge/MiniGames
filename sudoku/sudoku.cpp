@@ -1,3 +1,10 @@
+/*
+ * Copyright (C) 2026, Sudoku by Gee Wang
+ * Licensed under the GPLv3.
+ * C++17 standard is required.
+ */
+
+
 #include <iostream>
 #include <fstream>
 
