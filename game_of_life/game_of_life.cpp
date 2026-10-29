@@ -46,9 +46,9 @@
 #define GLRT_SF_INFMAP  0x04
 #define GLRT_SF_HELP    0x08
 
-#define GLRT_CTLID      1
 #define GLRT_TIMERID    1
 
+#define GLW_CTLID       1
 #define GLW_MINWNDW     400
 #define GLW_MINWNDH     400
 #define GLW_WNDNAME     "Game of Life"
@@ -155,16 +155,17 @@ const Speed::_Val Speed::_vlist[Speed::_count] = {
 
 class GLMap {
 public:
-    GLMap(size_t width, size_t height) : _width(width), _height(height), _gen(0) { _alloc(); }
-    GLMap(const GLMap&) = delete;
-    GLMap(GLMap&&) = delete;
-    ~GLMap() { _free(); }
+    GLMap(size_t width, size_t height) : _gen(0), _width(width), _height(height) { _alloc(); }
+    GLMap(const GLMap& other) : _gen(other._gen), _width(other._width), _height(other._height) { _alloc(); _copy(other); }
+    GLMap(GLMap&& other) noexcept : _gen(other._gen), _width(other._width), _height(other._height),
+        _mfront(nullptr), _mback(nullptr) { std::swap(_mfront, other._mfront); std::swap(_mback, other._mback); }
+    ~GLMap() noexcept { _free(); }
 
     bool* operator[](size_t row) { return _mfront + row * _width; }
 
+    size_t gen() const { return _gen; }
     size_t width() const { return _width; }
     size_t height() const { return _height; }
-    size_t gen() const { return _gen; }
     bool valid(size_t x, size_t y) const { return (x < _width && y < _height); }
 
     void init();
@@ -175,12 +176,16 @@ public:
     void next(bool boundless = false);
 
 private:
-    size_t _width, _height, _gen;
+    size_t _gen, _width, _height;
     bool* _mfront, * _mback;
 
-    void _alloc() { _mfront = new bool[_width * _height]; _mback = new bool[_width * _height]; }
-    void _free() { delete[] _mfront; delete[] _mback; }
     size_t _offset(size_t x, size_t y) const { return (x + _width) % _width + (y + _height) % _height * _width; }
+    void _alloc() { _mfront = new bool[_width * _height]; _mback = new bool[_width * _height]; }
+    void _free() noexcept { delete[] _mfront; delete[] _mback; }
+    void _copy(const GLMap& other) {
+        memcpy(_mfront, other._mfront, sizeof(bool) * _width * _height);
+        memcpy(_mback, other._mback, sizeof(bool) * _width * _height);
+    }
 };
 
 void GLMap::init() {
@@ -246,7 +251,7 @@ void GLMap::next(bool boundless /*flase*/) {
 }
 
 struct GLRuntime {
-    GLMap* map = nullptr;
+    GLMap map;
     BYTE scale = GLW_DEFSCALE;
     BYTE state = GLRT_SF_PAUSE | GLRT_SF_HELP;
     Speed speed = Speed::NORMAL;
@@ -257,16 +262,15 @@ struct GLRuntime {
     COLORREF col_barrier = GLW_COLBARRIER;
     COLORREF col_border = GLW_COLBORDER;
 
-    LONG width() const { return (map) ? ((LONG)map->width() + 2) * scale : 0; }
-    LONG height() const { return (map) ? ((LONG)map->height() + 2) * scale : 0; }
-    LONG mapoff(LONG wndpos, LONG offset) const { return (wndpos - offset) / scale - 1; }
-    LONG wndpos(LONG mapoff, LONG offset) const { return (mapoff + 1) * scale + offset; }
+    LONG width() const { return ((LONG)map.width() + 2) * scale; }
+    LONG height() const { return ((LONG)map.height() + 2) * scale; }
+    LONG map2pos(LONG mapoff) const { return (mapoff + 1) * scale; }
+    LONG pos2map(LONG wndpos) const { return (scale) ? wndpos / scale - 1 : 0; }
 
-    POINT offset(HWND hwnd) const;
-    void draw(HDC hdc, RECT region, POINT offset) const;
+    POINT origin(HWND hwnd) const;
 };
 
-POINT GLRuntime::offset(HWND hwnd) const {
+POINT GLRuntime::origin(HWND hwnd) const {
     POINT pt = {};
 
     RECT crect;
@@ -284,51 +288,11 @@ POINT GLRuntime::offset(HWND hwnd) const {
     return pt;
 }
 
-void GLRuntime::draw(HDC hdc, RECT region, POINT offset) const {
-    HBRUSH hbr = (HBRUSH)GetStockObject(DC_BRUSH);
-    COLORREF col_edge = (state & GLRT_SF_INFMAP) ? col_border : col_barrier;
-
-    RECT visual, content = { 0, 0, width(), height() };
-    OffsetRect(&content, offset.x, offset.y);
-
-    IntersectRect(&visual, &content, &region);
-    SetDCBrushColor(hdc, col_edge);
-    FillRect(hdc, &visual, hbr);
-
-    InflateRect(&content, -scale, -scale);
-    IntersectRect(&visual, &content, &region);
-    SetDCBrushColor(hdc, col_blank);
-    FillRect(hdc, &visual, hbr);
-
-    SetDCBrushColor(hdc, col_cell);
-    for (size_t i = 0; map && i < map->width() * map->height(); i++) {
-        LONG x = LONG(i % map->width()), y = LONG(i / map->width());
-        RECT cell = { 0, 0, scale, scale };
-        OffsetRect(&cell, wndpos(x, offset.x), wndpos(y, offset.y));
-        if ((*map)[y][x] && IntersectRect(&visual, &cell, &region)) {
-            FillRect(hdc, &visual, hbr);
-        }
-    }
-}
-
 
 LRESULT onCreate(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     LPCREATESTRUCT lpcs = (LPCREATESTRUCT)lparam;
     GLRuntime* pgl = (GLRuntime*)lpcs->lpCreateParams;
     SetWindowLongPtr(hwnd, GLWC_EX_GLRT, (LONG_PTR)pgl);
-
-    RECT trect = {};
-    HDC hdc = GetDC(hwnd);
-    DrawText(hdc, TEXT(GLSTR_WNDHELP), -1, &trect, DT_CALCRECT | DT_EXPANDTABS);
-    ReleaseDC(hwnd, hdc);
-
-    HWND htips = CreateWindow(
-        TEXT("STATIC"), TEXT(GLSTR_WNDHELP),
-        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
-        0, 0, trect.right - trect.left, trect.bottom - trect.top,
-        hwnd, (HMENU)GLRT_CTLID, lpcs->hInstance, nullptr
-    );
-    SetWindowLongPtr(hwnd, GLWC_EX_TIPS, (LONG_PTR)htips);
 
     RECT crect = { 0, 0, pgl->width(), pgl->height() };
     AdjustWindowRect(&crect, lpcs->style, FALSE);
@@ -340,6 +304,18 @@ LRESULT onCreate(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     sci.fMask = SIF_RANGE;
     SetScrollInfo(hwnd, SB_HORZ, &sci, FALSE);
     SetScrollInfo(hwnd, SB_VERT, &sci, FALSE);
+
+    RECT trect = {};
+    HDC hdc = GetDC(hwnd);
+    DrawText(hdc, TEXT(GLSTR_WNDHELP), -1, &trect, DT_CALCRECT | DT_EXPANDTABS);
+    ReleaseDC(hwnd, hdc);
+
+    CreateWindow(
+        TEXT("STATIC"), TEXT(GLSTR_WNDHELP),
+        WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
+        0, 0, trect.right - trect.left, trect.bottom - trect.top,
+        hwnd, (HMENU)GLW_CTLID, lpcs->hInstance, nullptr
+    );
 
     if (!(pgl->state & GLRT_SF_PAUSE) && pgl->speed != Speed::MANUAL)
         SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
@@ -396,7 +372,7 @@ LRESULT onGLZoom(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
 
     //get current scroll position
-    POINT npos, origin = pgl->offset(hwnd);
+    POINT npos, origin = pgl->origin(hwnd);
     sci.fMask = SIF_POS;
     GetScrollInfo(hwnd, SB_HORZ, &sci);
     npos.x = sci.nPos - std::max(origin.x, 0L);
@@ -437,7 +413,7 @@ LRESULT onGLSetScroll(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     bool hscroll = (vw > cw), vscroll = (vh > ch);
     hscroll |= (vscroll && vw > (cw - GetSystemMetrics(SM_CXVSCROLL)));
     vscroll |= (hscroll && vh > (ch - GetSystemMetrics(SM_CYHSCROLL)));
-    hscroll |= (vscroll && vw > (cw - GetSystemMetrics(SM_CXVSCROLL))); //reevaluate after changing
+    hscroll |= (vscroll && vw > (cw - GetSystemMetrics(SM_CXVSCROLL))); //evaluate twice to converge
 
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
     sci.fMask = SIF_RANGE | SIF_PAGE;   //MaxScrollPos = MaxRangeValue - (PageSize - 1)
@@ -455,7 +431,7 @@ LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     tstringstream text;
 
     text << pgl->name << TEXT(':') << TEXT("  ");
-    text << pgl->map->gen() << TEXT("  ");
+    text << pgl->map.gen() << TEXT("  ");
 
     if (pgl->state & GLRT_SF_INSERT) {
         text << TEXT("Insert") << TEXT("  ");
@@ -468,7 +444,7 @@ LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         text << TEXT('[') << pgl->speed.rps() << TEXT(" RPS") << TEXT(']');
     text << TEXT("  ");
 
-    if (pgl->map->valid(pgl->target.x, pgl->target.y))
+    if (pgl->map.valid(pgl->target.x, pgl->target.y))
         text << TEXT('(') << pgl->target.x << TEXT(',') << pgl->target.y << TEXT(')');
 
     SetWindowText(hwnd, text.str().c_str());
@@ -477,9 +453,8 @@ LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 
 LRESULT onGLHelp(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    HWND htips = (HWND)GetWindowLongPtr(hwnd, GLWC_EX_TIPS);
     pgl->state ^= GLRT_SF_HELP;
-    ShowWindow(htips, (pgl->state & GLRT_SF_HELP) ? SW_SHOW : SW_HIDE);
+    ShowWindow(GetDlgItem(hwnd, GLW_CTLID), (pgl->state & GLRT_SF_HELP) ? SW_SHOW : SW_HIDE);
     return 0;
 }
 
@@ -497,7 +472,7 @@ LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         break;
     case TEXT(GLW_CHAR_BS):     //clear the whole map
         if (pgl->state & GLRT_SF_INSERT) {
-            pgl->map->init();
+            pgl->map.init();
             PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
             InvalidateRect(hwnd, nullptr, FALSE);
         }
@@ -535,13 +510,13 @@ LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 LRESULT onLRButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam, bool lbutton) {
     GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
     if (pgl->state & GLRT_SF_INSERT) {
-        POINT origin = pgl->offset(hwnd);
-        POINT target = { pgl->mapoff(GETXLPARAM(lparam), origin.x), pgl->mapoff(GETYLPARAM(lparam), origin.y) };
+        POINT origin = pgl->origin(hwnd);
+        POINT target = { pgl->pos2map(GETXLPARAM(lparam) - origin.x), pgl->pos2map(GETYLPARAM(lparam) - origin.y) };
         pgl->target = target;
-        if (pgl->map->valid(target.x, target.y)) {
-            LONG x = pgl->wndpos(target.x, origin.x), y = pgl->wndpos(target.y, origin.y);
+        if (pgl->map.valid(target.x, target.y)) {
+            LONG x = pgl->map2pos(target.x) + origin.x, y = pgl->map2pos(target.y) + origin.y;
             RECT uprect = { x, y, x + pgl->scale, y + pgl->scale };
-            (*pgl->map)[target.y][target.x] = lbutton;
+            pgl->map[target.y][target.x] = lbutton;
             InvalidateRect(hwnd, &uprect, FALSE);
         }
     }
@@ -550,15 +525,15 @@ LRESULT onLRButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam, bool lbutton) {
 
 LRESULT onMouseMove(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    POINT origin = pgl->offset(hwnd);
-    POINT target = { pgl->mapoff(GETXLPARAM(lparam), origin.x), pgl->mapoff(GETYLPARAM(lparam), origin.y) };
+    POINT origin = pgl->origin(hwnd);
+    POINT target = { pgl->pos2map(GETXLPARAM(lparam) - origin.x), pgl->pos2map(GETYLPARAM(lparam) - origin.y) };
     pgl->target = target;
-    if ((pgl->state & GLRT_SF_INSERT) && (wparam == MK_LBUTTON || wparam == MK_RBUTTON)) {
+    if ((pgl->state & GLRT_SF_INSERT) && (wparam & (MK_LBUTTON | MK_RBUTTON))) {
         bool alive = wparam & MK_LBUTTON;
-        if (pgl->map->valid(target.x, target.y)) {
-            LONG x = pgl->wndpos(target.x, origin.x), y = pgl->wndpos(target.y, origin.y);
+        if (pgl->map.valid(target.x, target.y)) {
+            LONG x = pgl->map2pos(target.x) + origin.x, y = pgl->map2pos(target.y) + origin.y;
             RECT uprect = { x, y, x + pgl->scale, y + pgl->scale };
-            (*pgl->map)[target.y][target.x] = alive;
+            pgl->map[target.y][target.x] = alive;
             InvalidateRect(hwnd, &uprect, FALSE);
         }
     }
@@ -610,8 +585,8 @@ LRESULT onMouseWheel(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         SetScrollInfo(hwnd, nbar, &sci, TRUE);
         InvalidateRect(hwnd, nullptr, FALSE);
 
-        POINT origin = pgl->offset(hwnd);
-        pgl->target = { pgl->mapoff(pt.x, origin.x), pgl->mapoff(pt.y, origin.y) };
+        POINT origin = pgl->origin(hwnd);
+        pgl->target = { pgl->pos2map(pt.x - origin.x), pgl->pos2map(pt.y - origin.y) };
         PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     }
     return 0;
@@ -660,20 +635,35 @@ LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     HBITMAP hbmbuffer = CreateCompatibleBitmap(hdc, crect.right, crect.bottom);
     SelectObject(hdcbuffer, hbmbuffer);
 
-    //paint the map
+    //erase background
     HBRUSH hbr = (HBRUSH)GetStockObject(DC_BRUSH);
     SetDCBrushColor(hdcbuffer, GLW_COLBLANK);
     FillRect(hdcbuffer, &crect, hbr);
-    pgl->draw(hdcbuffer, ps.rcPaint, pgl->offset(hwnd));
 
-    BitBlt(
-        hdc,
-        ps.rcPaint.left, ps.rcPaint.top,
-        ps.rcPaint.right - ps.rcPaint.left, ps.rcPaint.bottom - ps.rcPaint.top,
-        hdcbuffer,
-        ps.rcPaint.left, ps.rcPaint.top,
-        SRCCOPY
-    );
+    //draw map edge
+    POINT origin = pgl->origin(hwnd);
+    RECT mrect = { origin.x, origin.y, origin.x + pgl->width(), origin.y + pgl->height() };
+    SetDCBrushColor(hdcbuffer, (pgl->state & GLRT_SF_INFMAP) ? pgl->col_border : pgl->col_barrier);
+    FillRect(hdcbuffer, &mrect, hbr);
+
+    //draw map cells
+    InflateRect(&mrect, -pgl->scale, -pgl->scale);
+    if (RectVisible(hdc, &mrect)) {
+        SetDCBrushColor(hdcbuffer, pgl->col_blank);
+        FillRect(hdcbuffer, &mrect, hbr);
+
+        SetDCBrushColor(hdcbuffer, pgl->col_cell);
+        for (size_t i = 0; i < pgl->map.width() * pgl->map.height(); i++) {
+            size_t r = i / pgl->map.width(), c = i % pgl->map.width();
+            LONG x = pgl->map2pos((LONG)c), y = pgl->map2pos((LONG)r);
+            RECT cell = { x, y, x + pgl->scale, y + pgl->scale };
+            if (pgl->map[r][c] && RectVisible(hdc, &cell)) {
+                FillRect(hdcbuffer, &cell, hbr);
+            }
+        }
+    }
+
+    BitBlt(hdc, 0, 0, crect.right, crect.bottom, hdcbuffer, 0, 0, SRCCOPY);
 
     DeleteObject(hdcbuffer);
     DeleteObject(hbmbuffer);
@@ -683,7 +673,7 @@ LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 
 LRESULT onTimer(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    pgl->map->next(pgl->state & GLRT_SF_INFMAP);
+    pgl->map.next(pgl->state & GLRT_SF_INFMAP);
     PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     InvalidateRect(hwnd, nullptr, FALSE);
     return 0;
@@ -796,9 +786,8 @@ bool initFromStream(GLMap& map, std::istream& data, int dtype) {
 int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
     tstring cmdl = lpCmdLine;
     if (cmdl.empty()) { //empty cmdl
-        GLMap map(GLM_DEFMAPW, GLM_DEFMAPH);
-        GLRuntime runtime = { &map };
-        map.init(GLM_DEFRATIO, std::random_device{}());
+        GLRuntime runtime = { {GLM_DEFMAPW, GLM_DEFMAPH} };
+        runtime.map.init(GLM_DEFRATIO, std::random_device{}());
         return runGame(&runtime, hInstance, nCmdShow);
     } else if (!cmdl.compare(0, 2, TEXT("-r"))) {   //cmdl: -r WIDTH HEIGHT SCALE RATIO
         tstringstream data(cmdl.substr(2));
@@ -808,9 +797,8 @@ int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
         data >> width >> height >> scale >> ratio;
         if (!data || width <= 0 || height <= 0) return RETVAL_BADARGS;
 
-        GLMap map(width, height);
-        GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
-        map.init(ratio, std::random_device{}());
+        GLRuntime runtime = { {(size_t)width, (size_t)height}, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
+        runtime.map.init(ratio, std::random_device{}());
         return runGame(&runtime, hInstance, nCmdShow);
     } else if (cmdl.find_first_of(TEXT(' ')) == cmdl.npos || cmdl.find_first_of(TEXT('"'), 1) == cmdl.size() - 1) { //cmdl: FILENAME
         tstring fname = (cmdl[0] == TEXT('"')) ? cmdl.substr(1, cmdl.size() - 2) : cmdl;    //remove quotes
@@ -821,9 +809,8 @@ int fromCmdLine(LPTSTR lpCmdLine, HINSTANCE hInstance, int nCmdShow) {
         file >> width >> height >> scale >> dtype;
         if (!file || width <= 0 || height <= 0) return RETVAL_BADDATA;
 
-        GLMap map(width, height);
-        GLRuntime runtime = { &map, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
-        if (!initFromStream(map, file, dtype)) return RETVAL_BADDATA;
+        GLRuntime runtime = { {(size_t)width, (size_t)height}, (BYTE)std::min(std::max(scale, GLW_MINSCALE), GLW_MAXSCALE) };
+        if (!initFromStream(runtime.map, file, dtype)) return RETVAL_BADDATA;
 
         file.close();
         return runGame(&runtime, hInstance, nCmdShow);
