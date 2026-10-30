@@ -21,13 +21,9 @@
 #define GETXLPARAM(l)   (MAKEPOINTS(l).x)
 #define GETYLPARAM(l)   (MAKEPOINTS(l).y)
 
-#define WM_GLPAUSE      (WM_APP + 0)
-#define WM_GLINSERT     (WM_APP + 1)
-#define WM_GLSPEED      (WM_APP + 2)    /* wparam is the gears to increase */
-#define WM_GLZOOM       (WM_APP + 3)    /* wparam is the pixels to zoom in, lparam is the mouse position */
+#define WM_GLZOOM       (WM_APP + 3)    /* wparam is the pixels to zoom, lparam is the mouse position */
 #define WM_GLSETSCROLL  (WM_APP + 4)    /* wparam is a BOOL indicating if redraw */
 #define WM_GLSETTEXT    (WM_APP + 5)
-#define WM_GLHELP       (WM_APP + 6)
 
 #define GL_BIRTHCNT     3
 #define GL_ALIVECNT     2
@@ -37,9 +33,8 @@
 #define GLM_DEFRATIO    0.25
 
 #define GLWC_CLSNAME    "GAMEOFLIFE"
-#define GLWC_EXSIZE     (2 * sizeof(LONG_PTR))
-#define GLWC_EX_GLRT    (0 * sizeof(LONG_PTR))
-#define GLWC_EX_TIPS    (1 * sizeof(LONG_PTR))
+#define GLWC_EXSIZE     sizeof(LONG_PTR)
+#define GLWC_EXOFFSET   0
 
 #define GLRT_SF_PAUSE   0x01
 #define GLRT_SF_INSERT  0x02
@@ -56,7 +51,6 @@
 #define GLW_MINSCALE    1
 #define GLW_MAXSCALE    10
 #define GLW_SCROLLPAGE  10
-#define GLW_ZOOMDELTA   3
 
 #define GLW_CHAR_ESC    '\x1B'
 #define GLW_CHAR_BS     '\x08'
@@ -292,7 +286,7 @@ POINT GLRuntime::origin(HWND hwnd) const {
 LRESULT onCreate(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     LPCREATESTRUCT lpcs = (LPCREATESTRUCT)lparam;
     GLRuntime* pgl = (GLRuntime*)lpcs->lpCreateParams;
-    SetWindowLongPtr(hwnd, GLWC_EX_GLRT, (LONG_PTR)pgl);
+    SetWindowLongPtr(hwnd, GLWC_EXOFFSET, (LONG_PTR)pgl);
 
     RECT crect = { 0, 0, pgl->width(), pgl->height() };
     AdjustWindowRect(&crect, lpcs->style, FALSE);
@@ -330,45 +324,8 @@ LRESULT onDestroy(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     return 0;
 }
 
-LRESULT onGLPause(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    pgl->state ^= GLRT_SF_PAUSE;
-    if (pgl->state & GLRT_SF_PAUSE) {   //pause
-        KillTimer(hwnd, GLRT_TIMERID);
-    } else {    //resume, exit insert mode at the same time
-        pgl->state &= ~GLRT_SF_INSERT;
-        if (pgl->speed != Speed::MANUAL)
-            SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
-    }
-    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
-    return 0;
-}
-
-LRESULT onGLInsert(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    pgl->state ^= GLRT_SF_INSERT;
-    if (pgl->state & GLRT_SF_INSERT) {  //pause and enter insert mode
-        pgl->state |= GLRT_SF_PAUSE;
-        KillTimer(hwnd, GLRT_TIMERID);
-    }
-    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
-    return 0;
-}
-
-LRESULT onGLSpeed(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    pgl->speed += (int)wparam;
-    if (pgl->speed == Speed::MANUAL) {
-        KillTimer(hwnd, GLRT_TIMERID);
-    } else if (!(pgl->state & GLRT_SF_PAUSE)) {
-        SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
-    }
-    PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
-    return 0;
-}
-
 LRESULT onGLZoom(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
 
     //get current scroll position
@@ -404,7 +361,7 @@ LRESULT onGLZoom(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onGLSetScroll(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     WINDOWINFO wndi = { sizeof(WINDOWINFO) };
     GetWindowInfo(hwnd, &wndi);
     int vw = pgl->width(), vh = pgl->height();
@@ -427,7 +384,7 @@ LRESULT onGLSetScroll(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     tstringstream text;
 
     text << pgl->name << TEXT(':') << TEXT("  ");
@@ -452,23 +409,34 @@ LRESULT onGLSetText(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onGLHelp(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    pgl->state ^= GLRT_SF_HELP;
-    ShowWindow(GetDlgItem(hwnd, GLW_CTLID), (pgl->state & GLRT_SF_HELP) ? SW_SHOW : SW_HIDE);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     return 0;
 }
 
 LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     switch (wparam) {
     case TEXT(GLW_CHAR_ESC):    //exit game
         DestroyWindow(hwnd);
         break;
     case TEXT(GLW_CHAR_PAUSE):  //pause game or resume
-        PostMessage(hwnd, WM_GLPAUSE, 0, 0);
+        pgl->state ^= GLRT_SF_PAUSE;
+        if (pgl->state & GLRT_SF_PAUSE) {   //pause
+            KillTimer(hwnd, GLRT_TIMERID);
+        } else {    //resume, exit insert mode at the same time
+            pgl->state &= ~GLRT_SF_INSERT;
+            if (pgl->speed != Speed::MANUAL)
+                SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
+        }
+        PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
         break;
     case TEXT(GLW_CHAR_INS):    //insert mode
-        PostMessage(hwnd, WM_GLINSERT, 0, 0);
+        pgl->state ^= GLRT_SF_INSERT;
+        if (pgl->state & GLRT_SF_INSERT) {  //pause and enter insert mode
+            pgl->state |= GLRT_SF_PAUSE;
+            KillTimer(hwnd, GLRT_TIMERID);
+        }
+        PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
         break;
     case TEXT(GLW_CHAR_BS):     //clear the whole map
         if (pgl->state & GLRT_SF_INSERT) {
@@ -484,10 +452,14 @@ LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         PostMessage(hwnd, WM_GLZOOM, -1, 0);
         break;
     case TEXT(GLW_CHAR_INC):    //speed up
-        PostMessage(hwnd, WM_GLSPEED, 1, 0);
-        break;
     case TEXT(GLW_CHAR_DEC):    //slow down
-        PostMessage(hwnd, WM_GLSPEED, -1, 0);
+        pgl->speed += (wparam == TEXT(GLW_CHAR_INC)) ? 1 : -1;
+        if (pgl->speed == Speed::MANUAL) {
+            KillTimer(hwnd, GLRT_TIMERID);
+        } else if (!(pgl->state & GLRT_SF_PAUSE)) {
+            SetTimer(hwnd, GLRT_TIMERID, pgl->speed.intvl(), nullptr);
+        }
+        PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
         break;
     case TEXT(GLW_CHAR_NEXT):   //next round when manual
         if (!(pgl->state & GLRT_SF_PAUSE) && pgl->speed == Speed::MANUAL) {
@@ -495,36 +467,25 @@ LRESULT onChar(HWND hwnd, WPARAM wparam, LPARAM lparam) {
         }
         break;
     case TEXT(GLW_CHAR_HELP):   //show or hide help information
-        PostMessage(hwnd, WM_GLHELP, 0, 0);
+        pgl->state ^= GLRT_SF_HELP;
+        ShowWindow(GetDlgItem(hwnd, GLW_CTLID), (pgl->state & GLRT_SF_HELP) ? SW_SHOW : SW_HIDE);
         break;
     case TEXT(GLW_CHAR_EDGE):   //change map type
         if (pgl->state & GLRT_SF_PAUSE) {
+            POINT origin = pgl->origin(hwnd);
+            RECT uprect = { origin.x, origin.y, origin.x + pgl->width(), origin.y + pgl->height() };
             pgl->state ^= GLRT_SF_INFMAP;
-            InvalidateRect(hwnd, nullptr, FALSE);
+            InvalidateRect(hwnd, &uprect, FALSE);
+            InflateRect(&uprect, -pgl->scale, -pgl->scale);
+            ValidateRect(hwnd, &uprect);
         }
         break;
-    }
-    return 0;
-}
-
-LRESULT onLRButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam, bool lbutton) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-    if (pgl->state & GLRT_SF_INSERT) {
-        POINT origin = pgl->origin(hwnd);
-        POINT target = { pgl->pos2map(GETXLPARAM(lparam) - origin.x), pgl->pos2map(GETYLPARAM(lparam) - origin.y) };
-        pgl->target = target;
-        if (pgl->map.valid(target.x, target.y)) {
-            LONG x = pgl->map2pos(target.x) + origin.x, y = pgl->map2pos(target.y) + origin.y;
-            RECT uprect = { x, y, x + pgl->scale, y + pgl->scale };
-            pgl->map[target.y][target.x] = lbutton;
-            InvalidateRect(hwnd, &uprect, FALSE);
-        }
     }
     return 0;
 }
 
 LRESULT onMouseMove(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     POINT origin = pgl->origin(hwnd);
     POINT target = { pgl->pos2map(GETXLPARAM(lparam) - origin.x), pgl->pos2map(GETYLPARAM(lparam) - origin.y) };
     pgl->target = target;
@@ -541,8 +502,55 @@ LRESULT onMouseMove(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     return 0;
 }
 
+LRESULT onLRButtonDown(HWND hwnd, WPARAM wparam, LPARAM lparam, bool lbutton) {
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+    if (pgl->state & GLRT_SF_INSERT) {
+        POINT origin = pgl->origin(hwnd);
+        POINT target = { pgl->pos2map(GETXLPARAM(lparam) - origin.x), pgl->pos2map(GETYLPARAM(lparam) - origin.y) };
+        pgl->target = target;
+        if (pgl->map.valid(target.x, target.y)) {
+            LONG x = pgl->map2pos(target.x) + origin.x, y = pgl->map2pos(target.y) + origin.y;
+            RECT uprect = { x, y, x + pgl->scale, y + pgl->scale };
+            pgl->map[target.y][target.x] = lbutton;
+            InvalidateRect(hwnd, &uprect, FALSE);
+        }
+    }
+    return 0;
+}
+
+LRESULT onMouseWheel(HWND hwnd, WPARAM wparam, LPARAM lparam, bool hwheel) {
+    POINT pt = { GETXLPARAM(lparam), GETYLPARAM(lparam) };
+    ScreenToClient(hwnd, &pt);
+
+    if (GET_KEYSTATE_WPARAM(wparam) & MK_CONTROL) { //zoom
+        int pix_to_zoom = (GET_WHEEL_DELTA_WPARAM(wparam) > 0) - (GET_WHEEL_DELTA_WPARAM(wparam) < 0);
+        SendMessage(hwnd, WM_GLZOOM, pix_to_zoom, MAKELPARAM(pt.x, pt.y));
+    } else {    //scroll
+        GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
+        SCROLLINFO sci = { sizeof(SCROLLINFO) };
+        UINT wheel_lines;
+        SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &wheel_lines, 0);
+
+        bool shift = GET_KEYSTATE_WPARAM(wparam) & MK_SHIFT;
+        int nbar = (shift ^ hwheel) ? SB_HORZ : SB_VERT;
+        int pix_to_wheel = int((float)wheel_lines * pgl->scale * GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA);
+        pix_to_wheel = (hwheel) ? -pix_to_wheel : pix_to_wheel;
+
+        sci.fMask = SIF_POS;
+        GetScrollInfo(hwnd, nbar, &sci);
+        sci.nPos -= pix_to_wheel;
+        SetScrollInfo(hwnd, nbar, &sci, TRUE);
+        InvalidateRect(hwnd, nullptr, FALSE);
+
+        POINT origin = pgl->origin(hwnd);
+        pgl->target = { pgl->pos2map(pt.x - origin.x), pgl->pos2map(pt.y - origin.y) };
+        PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
+    }
+    return 0;
+}
+
 LRESULT onScroll(HWND hwnd, WPARAM wparam, LPARAM lparam, bool hscroll) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     SCROLLINFO sci = { sizeof(SCROLLINFO) };
     int nbar = (hscroll) ? SB_HORZ : SB_VERT;
     sci.fMask = SIF_ALL;
@@ -564,36 +572,8 @@ LRESULT onScroll(HWND hwnd, WPARAM wparam, LPARAM lparam, bool hscroll) {
     return 0;
 }
 
-LRESULT onMouseWheel(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    POINT pt = { GETXLPARAM(lparam), GETYLPARAM(lparam) };
-    ScreenToClient(hwnd, &pt);
-
-    if (GET_KEYSTATE_WPARAM(wparam) & MK_CONTROL) { //zoom
-        int pws_to_zoom_in = GLW_ZOOMDELTA * GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
-        SendMessage(hwnd, WM_GLZOOM, pws_to_zoom_in, MAKELPARAM(pt.x, pt.y));
-    } else {    //scroll
-        GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
-        SCROLLINFO sci = { sizeof(SCROLLINFO) };
-        UINT wheel_lines;
-        SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &wheel_lines, 0);
-        int nbar = (GET_KEYSTATE_WPARAM(wparam) & MK_SHIFT) ? SB_HORZ : SB_VERT;
-        int cells_to_wheel = (WORD)wheel_lines * GET_WHEEL_DELTA_WPARAM(wparam) / WHEEL_DELTA;
-
-        sci.fMask = SIF_POS;
-        GetScrollInfo(hwnd, nbar, &sci);
-        sci.nPos -= cells_to_wheel * pgl->scale;
-        SetScrollInfo(hwnd, nbar, &sci, TRUE);
-        InvalidateRect(hwnd, nullptr, FALSE);
-
-        POINT origin = pgl->origin(hwnd);
-        pgl->target = { pgl->pos2map(pt.x - origin.x), pgl->pos2map(pt.y - origin.y) };
-        PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
-    }
-    return 0;
-}
-
 LRESULT onSize(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     switch (wparam) {
     case SIZE_RESTORED:
     case SIZE_MAXIMIZED:
@@ -608,16 +588,37 @@ LRESULT onSize(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 
 LRESULT onSizing(HWND hwnd, WPARAM wparam, LPARAM lparam) {
     //limit the window msize
-    PRECT pwrect = (PRECT)lparam;
-    bool left = (wparam == WMSZ_LEFT) || (wparam == WMSZ_TOPLEFT) || (wparam == WMSZ_BOTTOMLEFT);
-    bool right = (wparam == WMSZ_RIGHT) || (wparam == WMSZ_TOPRIGHT) || (wparam == WMSZ_BOTTOMRIGHT);
-    bool top = (wparam == WMSZ_TOP) || (wparam == WMSZ_TOPLEFT) || (wparam == WMSZ_TOPRIGHT);
-    bool bottom = (wparam == WMSZ_BOTTOM) || (wparam == WMSZ_BOTTOMLEFT) || (wparam == WMSZ_BOTTOMRIGHT);
-
-    if (left) pwrect->left = std::min(pwrect->left, pwrect->right - GLW_MINWNDW);
-    if (right) pwrect->right = std::max(pwrect->right, pwrect->left + GLW_MINWNDW);
-    if (top) pwrect->top = std::min(pwrect->top, pwrect->bottom - GLW_MINWNDH);
-    if (bottom) pwrect->bottom = std::max(pwrect->bottom, pwrect->top + GLW_MINWNDH);
+    PRECT prect = (PRECT)lparam;
+    switch (wparam) {
+    case WMSZ_LEFT:
+        prect->left = std::min(prect->left, prect->right - GLW_MINWNDW);
+        break;
+    case WMSZ_RIGHT:
+        prect->right = std::max(prect->right, prect->left + GLW_MINWNDW);
+        break;
+    case WMSZ_TOP:
+        prect->top = std::min(prect->top, prect->bottom - GLW_MINWNDH);
+        break;
+    case WMSZ_BOTTOM:
+        prect->bottom = std::max(prect->bottom, prect->top + GLW_MINWNDH);
+        break;
+    case WMSZ_TOPLEFT:
+        prect->left = std::min(prect->left, prect->right - GLW_MINWNDW);
+        prect->top = std::min(prect->top, prect->bottom - GLW_MINWNDH);
+        break;
+    case WMSZ_TOPRIGHT:
+        prect->right = std::max(prect->right, prect->left + GLW_MINWNDW);
+        prect->top = std::min(prect->top, prect->bottom - GLW_MINWNDH);
+        break;
+    case WMSZ_BOTTOMLEFT:
+        prect->left = std::min(prect->left, prect->right - GLW_MINWNDW);
+        prect->bottom = std::max(prect->bottom, prect->top + GLW_MINWNDH);
+        break;
+    case WMSZ_BOTTOMRIGHT:
+        prect->right = std::max(prect->right, prect->left + GLW_MINWNDW);
+        prect->bottom = std::max(prect->bottom, prect->top + GLW_MINWNDH);
+        break;
+    }
 
     //display or hide the scroll bar
     PostMessage(hwnd, WM_GLSETSCROLL, TRUE, 0);
@@ -625,7 +626,7 @@ LRESULT onSizing(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(hwnd, &ps);
 
@@ -654,8 +655,8 @@ LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 
         SetDCBrushColor(hdcbuffer, pgl->col_cell);
         for (size_t i = 0; i < pgl->map.width() * pgl->map.height(); i++) {
-            size_t r = i / pgl->map.width(), c = i % pgl->map.width();
-            LONG x = pgl->map2pos((LONG)c), y = pgl->map2pos((LONG)r);
+            LONG r = LONG(i / pgl->map.width()), c = LONG(i % pgl->map.width());
+            LONG x = origin.x + pgl->map2pos(c), y = origin.y + pgl->map2pos(r);
             RECT cell = { x, y, x + pgl->scale, y + pgl->scale };
             if (pgl->map[r][c] && RectVisible(hdc, &cell)) {
                 FillRect(hdcbuffer, &cell, hbr);
@@ -672,7 +673,7 @@ LRESULT onPaint(HWND hwnd, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT onTimer(HWND hwnd, WPARAM wparam, LPARAM lparam) {
-    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EX_GLRT);
+    GLRuntime* pgl = (GLRuntime*)GetWindowLongPtr(hwnd, GLWC_EXOFFSET);
     pgl->map.next(pgl->state & GLRT_SF_INFMAP);
     PostMessage(hwnd, WM_GLSETTEXT, 0, 0);
     InvalidateRect(hwnd, nullptr, FALSE);
@@ -685,34 +686,28 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         return onCreate(hwnd, wparam, lparam);
     case WM_DESTROY:
         return onDestroy(hwnd, wparam, lparam);
-    case WM_GLPAUSE:
-        return onGLPause(hwnd, wparam, lparam);
-    case WM_GLINSERT:
-        return onGLInsert(hwnd, wparam, lparam);
-    case WM_GLSPEED:
-        return onGLSpeed(hwnd, wparam, lparam);
     case WM_GLZOOM:
         return onGLZoom(hwnd, wparam, lparam);
     case WM_GLSETSCROLL:
         return onGLSetScroll(hwnd, wparam, lparam);
     case WM_GLSETTEXT:
         return onGLSetText(hwnd, wparam, lparam);
-    case WM_GLHELP:
-        return onGLHelp(hwnd, wparam, lparam);
     case WM_CHAR:
         return onChar(hwnd, wparam, lparam);
-    case WM_MOUSEMOVE:
-        return onMouseMove(hwnd, wparam, lparam);
     case WM_HSCROLL:
         return onScroll(hwnd, wparam, lparam, true);
     case WM_VSCROLL:
         return onScroll(hwnd, wparam, lparam, false);
+    case WM_MOUSEMOVE:
+        return onMouseMove(hwnd, wparam, lparam);
     case WM_LBUTTONDOWN:
         return onLRButtonDown(hwnd, wparam, lparam, true);
     case WM_RBUTTONDOWN:
         return onLRButtonDown(hwnd, wparam, lparam, false);
     case WM_MOUSEWHEEL:
-        return onMouseWheel(hwnd, wparam, lparam);
+        return onMouseWheel(hwnd, wparam, lparam, false);
+    case WM_MOUSEHWHEEL:
+        return onMouseWheel(hwnd, wparam, lparam, true);
     case WM_SIZE:
         return onSize(hwnd, wparam, lparam);
     case WM_SIZING:
